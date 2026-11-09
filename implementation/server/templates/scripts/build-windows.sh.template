@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Usage: bash scripts/build-windows.sh <new-output-dir>
+# Unsigned Windows installer and its evidence. On Windows it also runs the shell smoke check; elsewhere the
+# result is recorded as cross-build-only and the native gates stay blocked.
+set -euo pipefail
+[[ $# == 1 && ! -e "$1" && -d "$(dirname "$1")" ]] || { echo "Expected new output directory with existing parent" >&2; exit 2; }
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+mkdir "$1"
+OUT="$(cd "$1" && pwd)"
+STATUS=failed
+trap 'printf "%s\n" "$STATUS" > "$OUT/status.txt"' EXIT
+cd "$ROOT/@@webDir@@"
+npm run typecheck 2>&1 | tee "$OUT/web-types.log"
+npm run check 2>&1 | tee "$OUT/web-check.log"
+cd "$ROOT/@@desktopDir@@"
+npm run check 2>&1 | tee "$OUT/shell-check.log"
+CSC_IDENTITY_AUTO_DISCOVERY=false npm run package:win 2>&1 | tee "$OUT/package.log"
+if [[ "${OS:-}" == Windows_NT ]]; then
+  npm run smoke 2>&1 | tee "$OUT/smoke.log"
+  powershell.exe -NoProfile -File "$ROOT/scripts/inspect-windows.ps1" -Desktop "$ROOT/@@desktopDir@@" -Output "$OUT"
+  STATUS=unsigned-development-evidence
+else
+  python3 "$ROOT/@@scripts@@/platform_artifacts.py" record-windows "$ROOT/@@desktopDir@@" "$OUT" "@@applicationId@@" "@@productName@@.exe"
+  echo 'Blocked: native Windows signature, installer, runtime and media verification require Windows.' > "$OUT/delivery-gates.txt"
+  STATUS=cross-build-only
+fi

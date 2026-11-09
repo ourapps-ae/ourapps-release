@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Usage: bash scripts/build-apple-testflight.sh <macos|tvos> <version> <build> <new-output-dir>
+# A verified App Store Connect export for one Apple platform, signed with a temporary keychain filled from the
+# store's signing answer; nothing Apple lives in the repository. It needs the Apple signing helpers in
+# @@appleHelpers@@ (apple-testflight.py, apple-testflight-upload.py) and @@appleDir@@/build-platform.sh, which this
+# package does not ship.
+set -euo pipefail
+umask 077
+[[ $# == 4 ]] || { echo 'Expected platform, version, build and output directory' >&2; exit 2; }
+PLATFORM="$1"; VERSION="$2"; BUILD="$3"
+case "$PLATFORM" in macos|tvos) ;; *) echo 'Use macos or tvos' >&2; exit 2 ;; esac
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$BUILD" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid version/build' >&2; exit 2; }
+[[ ! -e "$4" && -d "$(dirname "$4")" ]] || { echo 'Expected new output with existing parent' >&2; exit 2; }
+: "${STORE_APP_ID:?Store app identifier required}"
+: "${STORE_BUILD_TOKEN:?Store build token required}"
+: "${STORE_API:=@@storeApi@@}"
+[[ "$STORE_APP_ID" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo 'Invalid store identifier' >&2; exit 2; }
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# The switch is read before any output, store call or signing material exists.
+python3 "$ROOT/@@scripts@@/release_targets.py" require "$PLATFORM"
+mkdir "$4"
+OUT="$(cd "$4" && pwd)"
+WORK="$(mktemp -d "$OUT/.signing.XXXXXX")"
+KC="$WORK/build.keychain-db"
+STATUS=failed
+PHASE=source-preflight
+HELPERS="$ROOT/@@appleHelpers@@"
+cleanup() {
+  RESULT=$?
+  set +e
+  CLEANUP_FAILED=0
+  if [[ -f "$WORK/profile-state.json" ]]; then python3 "$HELPERS/apple-testflight.py" profile remove "$WORK/inputs.json" "$WORK/profile-state.json" || CLEANUP_FAILED=1; fi
+  if [[ -f "$WORK/keychains.json" ]]; then python3 "$HELPERS/apple-testflight.py" keychain restore "$WORK/keychains.json" "$KC" || CLEANUP_FAILED=1; fi
+  if [[ -f "$KC" ]]; then security delete-keychain "$KC" >/dev/null 2>&1 || CLEANUP_FAILED=1; fi
+  rm -rf "$WORK"
+  if [[ "$CLEANUP_FAILED" == 1 ]]; then STATUS=cleanup-failed; RESULT=1; fi
+  python3 "$HELPERS/apple-testflight.py" result "$OUT/result.json" "$PLATFORM" "$PHASE" "$STATUS" "$RESULT"
+  printf '%s\n' "$STATUS" > "$OUT/status.txt"
+  exit "$RESULT"
+}
+trap cleanup EXIT
+xcodegen dump --spec "$ROOT/@@appleDir@@/project.yml" --type json --file "$WORK/spec.json" --quiet
+python3 "$HELPERS/apple-testflight.py" source-preflight "$PLATFORM" "$WORK/spec.json" "$ROOT/@@appleDir@@"
+API="$STORE_API/api/build/$STORE_APP_ID/$PLATFORM"
+PHASE=service-signing-readiness
+curl --fail --silent --show-error --head -H "Authorization: Bearer $STORE_BUILD_TOKEN" "$API/signing" > /dev/null
+curl --fail --silent --show-error -H "Authorization: Bearer $STORE_BUILD_TOKEN" "$API/signing" > "$WORK/signing.json"
+python3 "$HELPERS/apple-testflight.py" prepare "$PLATFORM" "$WORK/signing.json" "$WORK"
+@@signingPrefix@@_TEAM=$(jq -r .team "$WORK/inputs.json")
+@@signingPrefix@@_PROFILE=$(jq -r .profile "$WORK/inputs.json")
+export @@signingPrefix@@_TEAM @@signingPrefix@@_PROFILE
+export @@signingPrefix@@_EXPORT_OPTIONS="$WORK/ExportOptions.plist"
+export @@signingPrefix@@_PLATFORM_SIGNING=app-store
+if [[ "$PLATFORM" == macos ]]; then export @@signingPrefix@@_INSTALLER_METADATA="$WORK/installer-selector.json"; fi
+python3 "$ROOT/@@scripts@@/platform_artifacts.py" check-export "$PLATFORM" "$@@signingPrefix@@_EXPORT_OPTIONS" "$@@signingPrefix@@_TEAM" "$@@signingPrefix@@_PROFILE" "@@bundleId@@" "${@@signingPrefix@@_INSTALLER_METADATA:-}"
+PHASE=temporary-signing-setup
+PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+security create-keychain -p "$PASSWORD" "$KC" > /dev/null
+security set-keychain-settings -lut 21600 "$KC"
+security unlock-keychain -p "$PASSWORD" "$KC"
+python3 "$HELPERS/apple-testflight.py" keychain save "$WORK/keychains.json" "$KC"
+for PREFIX in application installer; do
+  [[ -f "$WORK/$PREFIX.pem" ]] || continue
+  security import "$WORK/$PREFIX.pem" -k "$KC" -A > /dev/null
+  security import "$WORK/$PREFIX.cer" -k "$KC" > /dev/null
+done
+security set-key-partition-list -S apple-tool:,apple: -s -k "$PASSWORD" "$KC" > /dev/null
+unset PASSWORD
+if [[ "$PLATFORM" == macos ]]; then
+  PHASE=installer-identity
+  python3 "$HELPERS/apple-testflight.py" installer-identity "$@@signingPrefix@@_INSTALLER_METADATA" "$@@signingPrefix@@_EXPORT_OPTIONS" "$KC" "$OUT/installer-identity.json"
+fi
+PHASE=temporary-signing-setup
+python3 "$HELPERS/apple-testflight.py" profile install "$WORK/inputs.json" "$WORK/profile-state.json"
+PHASE=archive-export
+if [[ "$PLATFORM" == macos ]]; then
+  (umask 022; bash "$ROOT/@@appleDir@@/build-platform.sh" "$PLATFORM" "$VERSION" "$BUILD" "$OUT/build")
+else
+  bash "$ROOT/@@appleDir@@/build-platform.sh" "$PLATFORM" "$VERSION" "$BUILD" "$OUT/build"
+fi
+PHASE=export-verification
+python3 "$HELPERS/apple-testflight.py" verify-export "$PLATFORM" "$OUT/build/export" "$VERSION" "$BUILD" "$@@signingPrefix@@_TEAM" "$OUT/export-verification.json"
+STATUS=exported-distribution-signatures-verified
+if [[ "${@@signingPrefix@@_TESTFLIGHT_UPLOAD:-false}" == true ]]; then
+  PHASE=upload-commit
+  python3 "$HELPERS/apple-testflight-upload.py" "$PLATFORM" "$STORE_APP_ID" "$OUT/export-verification.json" "${@@signingPrefix@@_TESTFLIGHT_NOTES:-Platform TestFlight build}" "$OUT/upload-result.json"
+  STATUS=uploaded-processing-unverified
+fi

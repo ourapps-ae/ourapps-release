@@ -1,0 +1,11 @@
+{
+  "id": "demo",
+  "name": "Demo",
+  "description": "A demonstration application for friends.",
+  "bundleId": "app.example.demo",
+  "targets": ["web", "android", "ios", "macos", "tvos", "windows"],
+  "iosDevices": ["iphone", "ipad"],
+  "macos": { "minOsVersion": "14.0", "architectures": ["arm64", "x64"] },
+  "tvos": { "minOsVersion": "17.0" },
+  "extra": { "minPlayers": 2, "maxPlayers": 9 }
+}

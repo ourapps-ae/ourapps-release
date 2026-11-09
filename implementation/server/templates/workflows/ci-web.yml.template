@@ -1,0 +1,35 @@
+# Web type check and build, only when the web application changes.
+name: ci-web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "@@webDir@@/**"
+      - ".github/workflows/ci-web.yml"
+  pull_request:
+    paths:
+      - "@@webDir@@/**"
+      - ".github/workflows/ci-web.yml"
+
+# A newer push replaces a check still running.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: @@webDir@@
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "@@node@@"
+          cache: npm
+          cache-dependency-path: @@webDir@@/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit && npx vite build

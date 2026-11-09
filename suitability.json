@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "jobs": ["ourapps-release"],
+  "profiles": [
+    {
+      "id": "any",
+      "load": {},
+      "cost": "none",
+      "regions": ["any"],
+      "compliance": [],
+      "notes": "Scripts and workflow templates; no service is run. The workflows run in GitHub Actions and publish to the ourapps.app store, whose minutes, runner prices, limits and terms were not checked, so no provider limits or costs are cited. Apple, Android and Cloudflare account requirements depend on the targets enabled."
+    }
+  ],
+  "notes": "No limits are cited because none were checked."
+}

@@ -1,0 +1,65 @@
+{
+  "id": "release-pipeline",
+  "type": "ae/release-pipeline",
+  "version": "1.0.0",
+  "operations": {
+    "renderRelease": {
+      "arguments": ["settings:ReleaseSettings", "options:ReleaseOptions|undefined"],
+      "returns": "{files:Record<string,string>,executable:string[],notes:string[]}"
+    },
+    "writeRelease": {
+      "arguments": ["directory:string", "result:RenderResult"],
+      "returns": "void"
+    },
+    "validateSettings": {
+      "arguments": ["settings:ReleaseSettings"],
+      "returns": "ResolvedRelease"
+    },
+    "parseTargets": {
+      "arguments": ["value:string"],
+      "returns": "Array<ios|android|web|macos|windows|tvos>"
+    },
+    "secretName": {
+      "arguments": ["reference:string"],
+      "returns": "string (repository secret name, capitals, digits and underscores)"
+    },
+    "release_targets.py read|check|require|merge|packages|publishes": {
+      "arguments": ["see the script header"],
+      "returns": "exit code 0 | 1 (failed read or disabled target) | 3 (nothing switched on, publishes only)"
+    },
+    "app_manifest.py build|validate": {
+      "arguments": ["app.json", "inputs.json", "out.json"],
+      "returns": "my-app.json schema 1, validated"
+    },
+    "platform_manifest.py validate|entries": {
+      "arguments": ["records.json", "version|urls.json", "out.json"],
+      "returns": "verified package records | install entries"
+    },
+    "platform_artifacts.py inspect-apple|check-export|installer-certificate|record-package|record-windows": {
+      "arguments": ["see the script header"],
+      "returns": "evidence JSON files; non-zero exit with a message when a check fails"
+    },
+    "publish_release.py": {
+      "arguments": ["--app release/app.json", "--version x.y.z", "--build n", "--apk path|-", "--icon path", "--screenshot path...", "--ipad-screenshots dir", "--changelog path"],
+      "returns": "a published GitHub Release with my-app.json, or exit 0 with nothing published when no target is switched on"
+    }
+  },
+  "types": {
+    "ReleaseSettings": "{targets:string (ios android web macos windows tvos; spaces),applicationId:slug,applicationName:label,manifestUrl:address (the store, no path),storeCredentials?:secretRef (repository secrets <NAME>_APP_ID and <NAME>_BUILD_TOKEN; unset means no store call, no iOS or TestFlight job),bundleIdentifier?:qualified (required for ios, macos, tvos),androidSigning?:secretRef (<NAME>_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS, _KEY_PASSWORD; required for android),webDeploy?:secretRef (<NAME>_API_TOKEN, <NAME>_ACCOUNT_ID)}",
+    "ReleaseOptions": "{scriptsDirectory?,webDirectory?,androidDirectory?,desktopDirectory?,appleDirectory?,appleHelpers?,serverDirectory?,fixturesDirectory?,nodeVersion?,javaVersion?,macRunner?,windowsRunner?,wranglerMajor?,iconPath?,screenshots?,ipadScreenshots?,changelog?,description?,extra?:Record<string,unknown>,signingPrefix?,productName?,iosDevices?,macosMinimum?,tvosMinimum?}",
+    "environment": "STORE_APP_ID, STORE_BUILD_TOKEN, STORE_API (default https://ourapps.app), STORE_MODE (none: no store; reads PIPELINE_TARGETS as on), PIPELINE_TARGETS, GITHUB_REPOSITORY, GH_TOKEN, WEB_URL, WEB_ZIP, TESTFLIGHT_URL, PLATFORM_PACKAGES_JSON"
+  },
+  "rendered": {
+    ".github/workflows/release.yml": "version, android, web, ios, testflight, publish jobs for the targets built on every tag; each job reads its store switch first",
+    ".github/workflows/ci-web.yml": "web type check and build",
+    ".github/workflows/ci-android.yml": "Android unit tests",
+    ".github/workflows/ci-server.yml": "server type check and tests (when serverDirectory is given)",
+    ".github/workflows/platform-packages.yml": "unsigned Mac, Apple TV and Windows evidence (manual)",
+    ".github/workflows/apple-testflight.yml": "Mac and Apple TV TestFlight export (manual)",
+    "scripts/build-windows.sh, scripts/inspect-windows.ps1, scripts/build-apple-testflight.sh": "build scripts the workflows call",
+    "release/app.json": "the application description the publish step reads"
+  },
+  "requirements": {
+    "theme": "none: the release pipeline requires no interface"
+  }
+}

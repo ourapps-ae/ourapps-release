@@ -1,0 +1,413 @@
+{
+  "format": 1,
+  "kind": "component",
+  "identity": {
+    "name": "ourapps-ae/ourapps-release",
+    "version": "0.3.0",
+    "sourceRevision": "19905b75dbea89fbfd424d67fe26c81aaed0e018",
+    "sourceTreeDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "licenceStatus": "deferred"
+  },
+  "facilities": [
+    {
+      "id": "release-pipeline",
+      "description": "Build, sign and publish client targets to ourapps.app"
+    }
+  ],
+  "documents": {
+    "contract": "CONTRACT.md",
+    "interfaces": [
+      "interfaces/release-pipeline.json",
+      "suitability.json"
+    ],
+    "examples": [
+      "examples/consumer.ts"
+    ],
+    "licenceNotice": "LICENCE"
+  },
+  "collect": [
+    {
+      "id": "targets",
+      "type": "string",
+      "grammar": "label",
+      "required": true,
+      "secret": false
+    },
+    {
+      "id": "applicationId",
+      "type": "string",
+      "grammar": "slug",
+      "required": true,
+      "secret": false
+    },
+    {
+      "id": "applicationName",
+      "type": "string",
+      "grammar": "label",
+      "required": true,
+      "secret": false
+    },
+    {
+      "id": "manifestUrl",
+      "type": "string",
+      "grammar": "address",
+      "required": false,
+      "secret": false,
+      "default": "https://ourapps.app"
+    },
+    {
+      "id": "storeCredentials",
+      "type": "string",
+      "grammar": "identifier",
+      "required": false,
+      "secret": true
+    },
+    {
+      "id": "bundleIdentifier",
+      "type": "string",
+      "grammar": "qualified",
+      "required": false,
+      "secret": false
+    },
+    {
+      "id": "androidSigning",
+      "type": "string",
+      "grammar": "identifier",
+      "required": false,
+      "secret": true
+    },
+    {
+      "id": "webDeploy",
+      "type": "string",
+      "grammar": "identifier",
+      "required": false,
+      "secret": true
+    }
+  ],
+  "files": [
+    {
+      "path": "CONTRACT.md",
+      "executable": false
+    },
+    {
+      "path": "INSTRUCTIONS.md",
+      "executable": false
+    },
+    {
+      "path": "LICENCE",
+      "executable": false
+    },
+    {
+      "path": "SOURCE.md",
+      "executable": false
+    },
+    {
+      "path": "examples/consumer.ts",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/render.ts",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/scripts/app_manifest.py",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/scripts/platform_artifacts.py",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/scripts/platform_manifest.py",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/scripts/publish_release.py",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/scripts/release_targets.py",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/scripts/build-apple-testflight.sh.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/scripts/build-windows.sh.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/scripts/inspect-windows.ps1.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/workflows/apple-testflight.yml.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/workflows/ci-android.yml.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/workflows/ci-server.yml.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/workflows/ci-web.yml.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/workflows/platform-packages.yml.template",
+      "executable": false
+    },
+    {
+      "path": "implementation/server/templates/workflows/release.yml.template",
+      "executable": false
+    },
+    {
+      "path": "interfaces/release-pipeline.json",
+      "executable": false
+    },
+    {
+      "path": "suitability.json",
+      "executable": false
+    },
+    {
+      "path": "tests/check_rendered.py",
+      "executable": false
+    },
+    {
+      "path": "tests/fixtures/CHANGELOG.md",
+      "executable": false
+    },
+    {
+      "path": "tests/fixtures/app.json",
+      "executable": false
+    },
+    {
+      "path": "tests/fixtures/previous-manifest.json",
+      "executable": false
+    },
+    {
+      "path": "tests/fixtures/settings.json",
+      "executable": false
+    },
+    {
+      "path": "tests/fixtures/switches.json",
+      "executable": false
+    },
+    {
+      "path": "tests/release.test.ts",
+      "executable": false
+    },
+    {
+      "path": "tests/test_release.py",
+      "executable": false
+    },
+    {
+      "path": "tools.lock.json",
+      "executable": false
+    },
+    {
+      "path": "visual/definition.json",
+      "executable": false
+    },
+    {
+      "path": "visual/examples/connected.json",
+      "executable": false
+    },
+    {
+      "path": "visual/output/connected.png",
+      "executable": false
+    },
+    {
+      "path": "visual/output/connected.svg",
+      "executable": false
+    },
+    {
+      "path": "visual/output/description.md",
+      "executable": false
+    }
+  ],
+  "artefacts": [
+    {
+      "source": "implementation/server/render.ts",
+      "destination": "components/ourapps-release/server/render.ts",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/scripts/app_manifest.py",
+      "destination": "components/ourapps-release/server/scripts/app_manifest.py",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/scripts/platform_artifacts.py",
+      "destination": "components/ourapps-release/server/scripts/platform_artifacts.py",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/scripts/platform_manifest.py",
+      "destination": "components/ourapps-release/server/scripts/platform_manifest.py",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/scripts/publish_release.py",
+      "destination": "components/ourapps-release/server/scripts/publish_release.py",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/scripts/release_targets.py",
+      "destination": "components/ourapps-release/server/scripts/release_targets.py",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/scripts/build-apple-testflight.sh.template",
+      "destination": "components/ourapps-release/server/templates/scripts/build-apple-testflight.sh.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/scripts/build-windows.sh.template",
+      "destination": "components/ourapps-release/server/templates/scripts/build-windows.sh.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/scripts/inspect-windows.ps1.template",
+      "destination": "components/ourapps-release/server/templates/scripts/inspect-windows.ps1.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/workflows/apple-testflight.yml.template",
+      "destination": "components/ourapps-release/server/templates/workflows/apple-testflight.yml.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/workflows/ci-android.yml.template",
+      "destination": "components/ourapps-release/server/templates/workflows/ci-android.yml.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/workflows/ci-server.yml.template",
+      "destination": "components/ourapps-release/server/templates/workflows/ci-server.yml.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/workflows/ci-web.yml.template",
+      "destination": "components/ourapps-release/server/templates/workflows/ci-web.yml.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/workflows/platform-packages.yml.template",
+      "destination": "components/ourapps-release/server/templates/workflows/platform-packages.yml.template",
+      "template": false,
+      "executable": false
+    },
+    {
+      "source": "implementation/server/templates/workflows/release.yml.template",
+      "destination": "components/ourapps-release/server/templates/workflows/release.yml.template",
+      "template": false,
+      "executable": false
+    }
+  ],
+  "dependencies": [],
+  "provides": [
+    {
+      "id": "release-pipeline",
+      "type": "ae/release-pipeline",
+      "version": "1.0.0",
+      "path": "interfaces/release-pipeline.json"
+    }
+  ],
+  "requires": [],
+  "visual": {
+    "definition": "visual/definition.json",
+    "examples": [
+      "visual/examples/connected.json"
+    ],
+    "outputs": [
+      "visual/output/connected.svg",
+      "visual/output/connected.png"
+    ],
+    "descriptions": [
+      "visual/output/description.md"
+    ]
+  },
+  "capabilities": {
+    "hosts": [],
+    "secrets": [],
+    "writes": [
+      "components/ourapps-release/server/render.ts",
+      "components/ourapps-release/server/scripts/app_manifest.py",
+      "components/ourapps-release/server/scripts/platform_artifacts.py",
+      "components/ourapps-release/server/scripts/platform_manifest.py",
+      "components/ourapps-release/server/scripts/publish_release.py",
+      "components/ourapps-release/server/scripts/release_targets.py",
+      "components/ourapps-release/server/templates/scripts/build-apple-testflight.sh.template",
+      "components/ourapps-release/server/templates/scripts/build-windows.sh.template",
+      "components/ourapps-release/server/templates/scripts/inspect-windows.ps1.template",
+      "components/ourapps-release/server/templates/workflows/apple-testflight.yml.template",
+      "components/ourapps-release/server/templates/workflows/ci-android.yml.template",
+      "components/ourapps-release/server/templates/workflows/ci-server.yml.template",
+      "components/ourapps-release/server/templates/workflows/ci-web.yml.template",
+      "components/ourapps-release/server/templates/workflows/platform-packages.yml.template",
+      "components/ourapps-release/server/templates/workflows/release.yml.template"
+    ]
+  },
+  "infrastructure": {
+    "accounts": [
+      "github",
+      "ourapps"
+    ],
+    "costStatus": "unmeasured",
+    "deployedReason": "Runs in the application's GitHub Actions: a GitHub repository with Actions, and, when store credentials are set, an ourapps.app account whose build token is held as a repository secret by reference. Android, Apple and Cloudflare accounts are needed only for the targets enabled. The package itself deploys nothing."
+  },
+  "verification": [
+    {
+      "id": "release",
+      "root": "package",
+      "argv": [
+        "node",
+        "--test",
+        "tests/release.test.ts"
+      ],
+      "cwd": ".",
+      "prepare": [],
+      "tools": {
+        "node": "26.5.0",
+        "python3": "3.12.8"
+      },
+      "fixtures": [
+        "tests/fixtures/CHANGELOG.md",
+        "tests/fixtures/app.json",
+        "tests/fixtures/previous-manifest.json",
+        "tests/fixtures/settings.json",
+        "tests/fixtures/switches.json"
+      ],
+      "locks": [
+        "tools.lock.json"
+      ],
+      "network": false,
+      "timeoutSeconds": 240,
+      "expectedExit": 0,
+      "scope": "required-local",
+      "requirements": []
+    }
+  ],
+  "upgrade": {
+    "policy": "patch",
+    "migration": "files-only"
+  }
+}

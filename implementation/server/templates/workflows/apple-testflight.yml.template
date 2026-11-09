@@ -1,0 +1,86 @@
+name: apple-platform-testflight
+run-name: Apple TestFlight ${{ inputs.platform }} ${{ inputs.version || 'pending' }} (${{ inputs.build || 'pending reservation' }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Explicit Apple platform
+        type: choice
+        options: [@@appleChoices@@]
+        required: true
+      version:
+        description: Reserved version, or optional expected manifest version
+        type: string
+        required: false
+      build:
+        description: Already reserved build number (requires version); empty reserves once in job
+        type: string
+        required: false
+      upload:
+        description: Upload verified export to TestFlight
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  STORE_API: "@@storeApi@@"
+  PIPELINE_TARGETS: "@@targets@@"
+
+concurrency:
+  group: apple-platform-testflight-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  export:
+    runs-on: @@macRunner@@
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Target switched on in the store
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+        run: python3 @@scripts@@/release_targets.py require "$PLATFORM"
+      - run: brew install xcodegen
+      - name: Resolve platform build reservation once
+        id: reservation
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          VERSION: ${{ inputs.version }}
+          BUILD: ${{ inputs.build }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+        run: python3 @@appleHelpers@@/reserve-apple-build.py "$PLATFORM" "$VERSION" "$BUILD"
+      - name: Platform signing readiness, build and verified export
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          VERSION: ${{ steps.reservation.outputs.version }}
+          BUILD: ${{ steps.reservation.outputs.build }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          @@signingPrefix@@_TESTFLIGHT_UPLOAD: ${{ inputs.upload }}
+        run: bash scripts/build-apple-testflight.sh "$PLATFORM" "$VERSION" "$BUILD" "$RUNNER_TEMP/testflight"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apple-${{ inputs.platform }}-export-evidence
+          path: |
+            ${{ runner.temp }}/testflight/status.txt
+            ${{ runner.temp }}/testflight/result.json
+            ${{ runner.temp }}/testflight/export-verification.json
+            ${{ runner.temp }}/testflight/installer-identity.json
+            ${{ runner.temp }}/testflight/upload-result.json
+            ${{ runner.temp }}/testflight/build/archive-metadata.json
+            ${{ runner.temp }}/testflight/build/archive.log
+            ${{ runner.temp }}/testflight/build/export.log
+            ${{ runner.temp }}/testflight/build/export/*.pkg
+            ${{ runner.temp }}/testflight/build/export/*.ipa
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Delivery state
+        if: always()
+        run: echo 'Export and upload results do not establish Apple processing, beta approval or invitation readiness. Read the evidence artifacts for the actual completed stage.' >> "$GITHUB_STEP_SUMMARY"

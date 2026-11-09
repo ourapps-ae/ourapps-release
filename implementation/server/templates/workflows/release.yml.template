@@ -1,0 +1,369 @@
+# Builds each enabled client target (@@pipelineTargets@@), publishes one GitHub Release per build@@if store@@ and tells the store@@end@@.
+# A target switched off @@if store@@in the store @@end@@is skipped and keeps the latest release's entry. Secrets are named by
+# reference only: @@secretsList@@.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+@@if store@@
+  repository_dispatch:
+    types: [store-release]
+@@end@@
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+@@if store@@
+  STORE_API: "@@storeApi@@"
+@@end@@
+@@if nostore@@
+  STORE_MODE: "none"
+@@end@@
+  PIPELINE_TARGETS: "@@pipelineTargets@@"
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ github.run_number }}
+@@if ios@@
+      ios: ${{ steps.ios.outputs.enabled }}
+      testflight: ${{ steps.ios.outputs.testflight }}
+@@end@@
+@@if android@@
+      android: ${{ steps.targets.outputs.android }}
+@@end@@
+@@if web@@
+      web: ${{ steps.targets.outputs.web }}
+@@end@@
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # The switch per target, read when the run starts (from the store when store credentials are set; a failed read stops the run).
+      - id: targets
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: python3 @@scripts@@/release_targets.py read "$RUNNER_TEMP/targets.json" --github-output
+@@if ios@@
+      # The store signs iPhone builds: enabled once it answers for this application's signing with an App
+      # Store profile. Only the TestFlight link leaves this step; the key is never kept.
+      - id: ios
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: |
+          S="$RUNNER_TEMP/signing.json"
+          if [[ "${{ steps.targets.outputs.ios }}" == true ]] \
+            && curl -sf -o /dev/null -I -H "Authorization: Bearer $STORE_BUILD_TOKEN" "$STORE_API/api/build/$STORE_APP_ID/signing" \
+            && curl -sSf -H "Authorization: Bearer $STORE_BUILD_TOKEN" "$STORE_API/api/build/$STORE_APP_ID/signing" > "$S" \
+            && jq -e '.storeProfile != null' "$S" >/dev/null; then
+            { echo "enabled=true"; echo "testflight=$(jq -r '.testflight.url // "https://testflight.apple.com"' "$S")"; } >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+          rm -f "$S"
+@@end@@
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then tag="${GITHUB_REF#refs/tags/}"; else tag="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo v0.0.0)"; fi
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+@@if android@@
+
+  android:
+    needs: version
+    if: needs.version.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # Read again as the job starts, as it may have waited in the queue; switched off, it builds nothing.
+      - name: Target enabled
+        id: target
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: python3 @@scripts@@/release_targets.py check android
+      - if: steps.target.outputs.on == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "@@java@@"
+          cache: gradle
+      - if: steps.target.outputs.on == 'true'
+        name: Keystore
+        env:
+          KS: ${{ secrets.@@androidKeystore@@ }}
+        run: |
+          test -n "$KS" || { echo "@@androidKeystore@@ secret missing"; exit 1; }
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - if: steps.target.outputs.on == 'true'
+        name: Build
+        working-directory: @@androidDir@@
+        env:
+          @@signingPrefix@@_KEYSTORE: ${{ runner.temp }}/release.jks
+          @@signingPrefix@@_KEYSTORE_PASSWORD: ${{ secrets.@@androidKeystorePassword@@ }}
+          @@signingPrefix@@_KEY_ALIAS: ${{ secrets.@@androidKeyAlias@@ }}
+          @@signingPrefix@@_KEY_PASSWORD: ${{ secrets.@@androidKeyPassword@@ }}
+        run: |
+          test -x ./gradlew || gradle wrapper --no-daemon
+          ./gradlew --no-daemon -q assembleRelease \
+            -PversionName=${{ needs.version.outputs.version }} -PversionCode=${{ needs.version.outputs.build }}
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/app.apk"
+      - if: steps.target.outputs.on == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: @@applicationId@@-apk
+          path: ${{ runner.temp }}/app.apk
+          retention-days: 7
+@@end@@
+@@if web@@
+
+  web:
+    needs: version
+    if: needs.version.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      # Read again as the job starts, as it may have waited in the queue; switched off, it builds nothing.
+      - name: Target enabled
+        id: target
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: python3 @@scripts@@/release_targets.py check web
+      - if: steps.target.outputs.on == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "@@node@@"
+      - if: steps.target.outputs.on == 'true'
+        name: Build
+        working-directory: @@webDir@@
+        run: |
+          npm ci
+          npx tsc --noEmit
+          VITE_APP_VERSION=${{ needs.version.outputs.version }} npx vite build
+          test -f dist/index.html && test -f dist/_headers
+      # Files only, on the web application's own Worker; each deploy replaces the site at the same address.
+      # Without a token the store serves web.zip instead, so a rebuild never fails for want of it.
+      # Read again after the build, just before the site is replaced.
+      - if: steps.target.outputs.on == 'true'
+        id: late
+        name: Web still switched on
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: python3 @@scripts@@/release_targets.py check web
+      - if: steps.late.outputs.on == 'true'
+        id: deploy
+        name: Deploy
+        working-directory: @@webDir@@
+@@if cloudflare@@
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.@@cfToken@@ }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.@@cfAccount@@ }}
+@@end@@
+        run: |
+          if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+            (cd dist && zip -q -0 -r "$RUNNER_TEMP/web.zip" .)
+            unzip -l "$RUNNER_TEMP/web.zip" | grep -q " index.html$"
+            exit 0
+          fi
+          npx wrangler@@wrangler@@ deploy | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          test -n "$url" || { echo "No workers.dev address in the deploy output"; exit 1; }
+          echo "url=$url/" >> "$GITHUB_OUTPUT"
+      - if: steps.late.outputs.on == 'true' && steps.deploy.outputs.url == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: @@applicationId@@-web
+          path: ${{ runner.temp }}/web.zip
+          retention-days: 7
+@@end@@
+@@if ios@@
+
+  ios:
+    needs: version
+    if: needs.version.outputs.ios == 'true'
+    runs-on: @@macRunner@@
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # Read again as the job starts, as it may have waited in the queue; switched off, it builds nothing.
+      - name: Target enabled
+        id: target
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: python3 @@scripts@@/release_targets.py check ios
+      - if: steps.target.outputs.on == 'true'
+        run: brew install xcodegen
+      # Certificate, key and App Store profile from the store; nothing Apple lives in the repository.
+      - if: steps.target.outputs.on == 'true'
+        name: Signing
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: |
+          S="$RUNNER_TEMP/signing.json"
+          curl -sSf -H "Authorization: Bearer $STORE_BUILD_TOKEN" "$STORE_API/api/build/$STORE_APP_ID/signing" > "$S"
+          KC="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "" "$KC"
+          jq -r .privateKeyPem "$S" > "$RUNNER_TEMP/key.pem"
+          jq -r .certificate.base64 "$S" | base64 -d > "$RUNNER_TEMP/cert.cer"
+          security import "$RUNNER_TEMP/key.pem" -k "$KC" -A
+          security import "$RUNNER_TEMP/cert.cer" -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KC" >/dev/null
+          security list-keychain -d user -s "$KC" login.keychain-db
+          rm "$RUNNER_TEMP/key.pem"
+          uuid=$(jq -r .storeProfile.uuid "$S"); name=$(jq -r .storeProfile.profileName "$S")
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          jq -r .storeProfile.profileBase64 "$S" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/"$uuid".mobileprovision
+          { echo "PROFILE_NAME=$name"; echo "@@signingPrefix@@_TEAM=$(jq -r .teamId "$S")"; } >> "$GITHUB_ENV"
+          rm "$S"
+      - if: steps.target.outputs.on == 'true'
+        name: Build
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          @@appleDir@@/build-ipa.sh ${{ needs.version.outputs.version }} ${{ needs.version.outputs.build }} "$PROFILE_NAME" "$RUNNER_TEMP/out"
+      - name: Remove signing
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true
+          rm -f "$RUNNER_TEMP/key.pem" "$RUNNER_TEMP/cert.cer" "$RUNNER_TEMP/signing.json"
+      - if: steps.target.outputs.on == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: @@applicationId@@-ipa
+          path: ${{ runner.temp }}/out/app.ipa
+          retention-days: 7
+
+  # To TestFlight through the store, from Linux to keep Mac minutes down: the store reserves the
+  # upload at Apple, the bytes go straight there, then the store gets the file's MD5. Each run has
+  # a higher build number (the run number), as Apple requires.
+  testflight:
+    needs: [version, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # Read again as the job starts, as it may have waited in the queue; switched off, it builds nothing.
+      - name: Target enabled
+        id: target
+@@if store@@
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+        run: python3 @@scripts@@/release_targets.py check ios
+      - if: steps.target.outputs.on == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: @@applicationId@@-ipa
+          path: ${{ runner.temp }}/ipa
+      - if: steps.target.outputs.on == 'true'
+        name: Upload
+        env:
+          STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+          STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+          VERSION: ${{ needs.version.outputs.version }}
+          BUILD: ${{ needs.version.outputs.build }}
+        run: |
+          IPA="$RUNNER_TEMP/ipa/app.ipa"
+          NOTES=$(awk -v v="$VERSION" '/^## \[/ { if (found) exit; found = ($0 ~ "^## \\[" v "\\]"); next } found { print }' @@changelog@@ | sed -e '/^###/d' -e 's/^- /• /' | sed -e '/./,$!d' | head -c 3900)
+          SIZE=$(wc -c < "$IPA" | tr -d ' ')
+          MD5=$(openssl dgst -md5 "$IPA" | awk '{print $NF}')
+          API="$STORE_API/api/build/$STORE_APP_ID/testflight"
+          jq -n --arg v "$VERSION" --arg b "$BUILD" --argjson s "$SIZE" --arg n "$NOTES" \
+            '{version: $v, buildNumber: $b, fileName: "app.ipa", fileSize: $s, whatsNew: $n}' |
+            curl -sSf -X POST -H "Authorization: Bearer $STORE_BUILD_TOKEN" -H "Content-Type: application/json" \
+              --data-binary @- "$API/upload" > "$RUNNER_TEMP/upload.json"
+          jq -c '.operations[]' "$RUNNER_TEMP/upload.json" | while read -r op; do
+            args=(); while IFS= read -r h; do args+=(-H "$h"); done < <(jq -r '.requestHeaders[]? | "\(.name): \(.value)"' <<<"$op")
+            tail -c +$(( $(jq -r .offset <<<"$op") + 1 )) "$IPA" | head -c "$(jq -r .length <<<"$op")" |
+              curl -sSf -X "$(jq -r .method <<<"$op")" "${args[@]}" --data-binary @- "$(jq -r .url <<<"$op")" >/dev/null
+          done
+          jq -n --arg f "$(jq -r .uploadFileId "$RUNNER_TEMP/upload.json")" --arg m "$MD5" '{uploadFileId: $f, md5: $m}' |
+            curl -sSf -X POST -H "Authorization: Bearer $STORE_BUILD_TOKEN" -H "Content-Type: application/json" \
+              --data-binary @- "$API/commit"
+@@end@@
+
+  # Every switched-on target built; a switched-off one keeps the latest release's entry.
+  publish:
+    needs: [@@needs@@]
+    if: >-
+      always() && needs.version.result == 'success'
+@@if android@@
+      && (needs.android.result == 'success' || needs.version.outputs.android != 'true')
+@@end@@
+@@if web@@
+      && (needs.web.result == 'success' || needs.version.outputs.web != 'true')
+@@end@@
+@@if ios@@
+      && (needs.testflight.result == 'success' || (needs.ios.result == 'skipped' && needs.testflight.result == 'skipped'))
+@@end@@
+      && (@@anyOn@@)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+      BUILD: ${{ needs.version.outputs.build }}
+@@if store@@
+      STORE_BUILD_TOKEN: ${{ secrets.@@storeToken@@ }}
+      STORE_APP_ID: ${{ secrets.@@storeAppId@@ }}
+@@end@@
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/a
+      - name: Release
+        run: |
+          apk="-"
+@@if android@@
+          apk="$RUNNER_TEMP/a/@@applicationId@@-apk/app.apk"; test -f "$apk" || apk="-"
+@@end@@
+          zip=""
+@@if web@@
+          zip="$RUNNER_TEMP/a/@@applicationId@@-web/web.zip"; test -f "$zip" || zip=""
+@@end@@
+@@if store@@
+          testflight=""
+@@end@@
+@@if ios@@
+          [[ "${{ needs.testflight.result }}" == success ]] && testflight="${{ needs.version.outputs.testflight }}"
+@@end@@
+          shots=(); for f in @@screenshots@@; do [[ -e "$f" ]] && shots+=(--screenshot "$f"); done
+          WEB_URL="@@webUrlExpression@@" WEB_ZIP="$zip"@@if store@@ TESTFLIGHT_URL="$testflight"@@end@@ \
+            python3 @@scripts@@/publish_release.py --app release/app.json --version "$VERSION" --build "$BUILD" \
+              --apk "$apk" --icon @@icon@@ --changelog @@changelog@@ --ipad-screenshots @@ipadScreenshots@@ "${shots[@]}"

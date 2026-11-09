@@ -1,0 +1,27 @@
+{
+  "all": {
+    "targets": "web android ios macos tvos windows",
+    "applicationId": "demo",
+    "applicationName": "Demo App",
+    "manifestUrl": "https://ourapps.app",
+    "storeCredentials": "store/demo",
+    "bundleIdentifier": "app.example.demo",
+    "androidSigning": "android/signing",
+    "webDeploy": "cloudflare/web"
+  },
+  "webOnly": { "targets": "web", "applicationId": "demo", "applicationName": "Demo App", "manifestUrl": "https://ourapps.app/", "storeCredentials": "store/demo" },
+  "invalid": [
+    [{ "targets": "web linux" }, "unknown target"],
+    [{ "targets": "web web" }, "twice"],
+    [{ "targets": "" }, "at least one"],
+    [{ "applicationId": "Demo" }, "slug"],
+    [{ "applicationName": "<b>" }, "label"],
+    [{ "manifestUrl": "http://store.example" }, "https"],
+    [{ "manifestUrl": "https://store.example/api" }, "address"],
+    [{ "storeCredentials": "ghp_0123456789 abcdef" }, "secret"],
+    [{ "bundleIdentifier": "" }, "bundleIdentifier is required"],
+    [{ "androidSigning": "" }, "androidSigning"],
+    [{ "androidSigning": "store.demo" }, "different secrets"],
+    [{ "bundleIdentifier": "App.Example" }, "bundleIdentifier"]
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "demo",
+  "name": "Demo",
+  "version": "0.5.0",
+  "description": "A demonstration application for friends.",
+  "icon": "https://api.github.com/old/icon",
+  "screenshots": [],
+  "install": {
+    "pwa": "https://old.example/",
+    "android": { "apk": "https://api.github.com/old/apk" },
+    "ios": { "bundleId": "app.example.demo", "testflight": "https://testflight.apple.com/join/OLD", "devices": ["iphone", "ipad"] },
+    "tvos": { "bundleId": "app.example.demo", "minOsVersion": "17.0" },
+    "macos": { "packages": [], "testflight": { "bundleId": "app.example.demo", "minOsVersion": "14.0", "architectures": ["arm64", "x64"] } },
+    "windows": { "packages": [{ "url": "https://api.github.com/old/exe", "format": "exe", "architectures": ["x64"], "minOsVersion": "10.0", "signing": "unsigned" }] }
+  }
+}

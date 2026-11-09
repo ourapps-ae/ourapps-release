@@ -1,0 +1,29 @@
+param([Parameter(Mandatory=$true)][string]$Desktop, [Parameter(Mandatory=$true)][string]$Output)
+$ErrorActionPreference = 'Stop'
+$package = Get-Content (Join-Path $Desktop 'package.json') -Raw | ConvertFrom-Json
+$products = Join-Path $Desktop 'artifacts'
+$evidence = Get-Content (Join-Path $products 'package-evidence.json') -Raw | ConvertFrom-Json
+$installerName = "@@applicationId@@-$($evidence.version)-windows-x64-unsigned.exe"
+$installers = @(Get-ChildItem $products -Filter $installerName -File)
+if ($installers.Count -ne 1) { throw "Expected installer $installerName in $products" }
+$app = Join-Path $products 'win-unpacked/@@productName@@.exe'
+if (!(Test-Path $app)) { throw "Missing packaged application: $app" }
+$bytes = [System.IO.File]::ReadAllBytes($app)
+$pe = [BitConverter]::ToInt32($bytes, 0x3c)
+if ([BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'Expected x64 application' }
+$installer = $installers[0]
+$signature = Get-AuthenticodeSignature $installer.FullName
+if ($signature.Status -ne 'NotSigned') { throw "Unsigned workflow produced unexpected signing state: $($signature.Status)" }
+$version = $installer.VersionInfo.ProductVersion
+if (!$version -or !$version.StartsWith($evidence.version)) { throw "Installer version mismatch: $version" }
+if ($evidence.architecture -ne 'x64' -or $evidence.minimumWindows -ne '10' -or $evidence.electron -ne $package.devDependencies.electron) { throw 'Package evidence mismatch' }
+Copy-Item $installer.FullName $Output
+$metadata = [ordered]@{
+  platform = 'windows'; version = $evidence.version; fileName = $installer.Name; format = 'exe'
+  architectures = @('x64'); minOsVersion = '10.0'; signing = 'unsigned'
+  sha256 = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  size = $installer.Length; electron = $package.devDependencies.electron
+  purpose = 'build-evidence'; distributionReady = $false; nativeInstallerTested = $false
+}
+$metadata | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Output 'package-metadata.json') -Encoding utf8
+'Blocked: installer install/launch/uninstall, media, signing and download availability require separate evidence.' | Set-Content (Join-Path $Output 'delivery-gates.txt')

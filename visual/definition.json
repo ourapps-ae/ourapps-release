@@ -1,0 +1,77 @@
+{
+  "id": "ourapps-ae.ourapps-release",
+  "name": "Ourapps release",
+  "kind": "component",
+  "status": "example",
+  "package": "ourapps-ae/ourapps-release",
+  "version": "0.3.0",
+  "ports": [
+    {
+      "id": "release-pipeline",
+      "name": "Release pipeline",
+      "direction": "output",
+      "kind": "interface",
+      "type": "ae/release-pipeline",
+      "version": "1.0.0"
+    }
+  ],
+  "settings": [
+    {
+      "id": "targets",
+      "name": "Targets",
+      "type": "string",
+      "required": true,
+      "secret": false
+    },
+    {
+      "id": "applicationId",
+      "name": "Applicationid",
+      "type": "string",
+      "required": true,
+      "secret": false
+    },
+    {
+      "id": "applicationName",
+      "name": "Applicationname",
+      "type": "string",
+      "required": true,
+      "secret": false
+    },
+    {
+      "id": "manifestUrl",
+      "name": "Manifesturl",
+      "type": "string",
+      "required": false,
+      "secret": false,
+      "default": "https://ourapps.app"
+    },
+    {
+      "id": "storeCredentials",
+      "name": "Storecredentials",
+      "type": "string",
+      "required": false,
+      "secret": true
+    },
+    {
+      "id": "bundleIdentifier",
+      "name": "Bundleidentifier",
+      "type": "string",
+      "required": false,
+      "secret": false
+    },
+    {
+      "id": "androidSigning",
+      "name": "Androidsigning",
+      "type": "string",
+      "required": false,
+      "secret": true
+    },
+    {
+      "id": "webDeploy",
+      "name": "Webdeploy",
+      "type": "string",
+      "required": false,
+      "secret": true
+    }
+  ]
+}

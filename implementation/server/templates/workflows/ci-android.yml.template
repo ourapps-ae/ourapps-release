@@ -1,0 +1,36 @@
+# Android unit tests, only when the Android project or the shared fixtures change. Gradle downloads are cached.
+name: ci-android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "@@androidDir@@/**"
+      - "@@fixturesDir@@/**"
+      - ".github/workflows/ci-android.yml"
+  pull_request:
+    paths:
+      - "@@androidDir@@/**"
+      - "@@fixturesDir@@/**"
+      - ".github/workflows/ci-android.yml"
+
+# A newer push replaces a check still running.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "@@java@@"
+          cache: gradle
+      - run: test -x ./gradlew || gradle wrapper --no-daemon
+        working-directory: @@androidDir@@
+      - run: ./gradlew --no-daemon -q testDebugUnitTest
+        working-directory: @@androidDir@@
