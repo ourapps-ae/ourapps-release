@@ -40,7 +40,7 @@ Dependencies: none.
 `tools.lock.json` pins verification tools: node 26.5.0, python3 3.12.8. Licence wording remains deferred.
 
 ## Provided interfaces
-- `interfaces/release-pipeline.json` defines `release-pipeline` (ae/release-pipeline) version 1.0.0.
+- `interfaces/release-pipeline.json` defines `release-pipeline` (ae/release-pipeline) version 1.0.0 as an OpenRPC 1.3.2 document. Methods tagged `typescript` are the build-time functions of `server/render.ts` (`renderRelease`, `writeRelease`, `validateSettings`, `parseTargets`, `secretName`); methods tagged `command` are the subcommands of the Python scripts the workflows run (`release_targets.py read`, `app_manifest.py build`, `publish_release.py` and the others), with command-line arguments as parameters and the exit status as result. Settings, render result, `release/app.json`, the store's target switches and `my-app.json` are JSON Schema 2020-12 under `components.schemas`.
 
 ## Required interfaces
 None.

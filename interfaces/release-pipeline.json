@@ -1,65 +1,1746 @@
 {
-  "id": "release-pipeline",
-  "type": "ae/release-pipeline",
-  "version": "1.0.0",
-  "operations": {
-    "renderRelease": {
-      "arguments": ["settings:ReleaseSettings", "options:ReleaseOptions|undefined"],
-      "returns": "{files:Record<string,string>,executable:string[],notes:string[]}"
-    },
-    "writeRelease": {
-      "arguments": ["directory:string", "result:RenderResult"],
-      "returns": "void"
-    },
-    "validateSettings": {
-      "arguments": ["settings:ReleaseSettings"],
-      "returns": "ResolvedRelease"
-    },
-    "parseTargets": {
-      "arguments": ["value:string"],
-      "returns": "Array<ios|android|web|macos|windows|tvos>"
-    },
-    "secretName": {
-      "arguments": ["reference:string"],
-      "returns": "string (repository secret name, capitals, digits and underscores)"
-    },
-    "release_targets.py read|check|require|merge|packages|publishes": {
-      "arguments": ["see the script header"],
-      "returns": "exit code 0 | 1 (failed read or disabled target) | 3 (nothing switched on, publishes only)"
-    },
-    "app_manifest.py build|validate": {
-      "arguments": ["app.json", "inputs.json", "out.json"],
-      "returns": "my-app.json schema 1, validated"
-    },
-    "platform_manifest.py validate|entries": {
-      "arguments": ["records.json", "version|urls.json", "out.json"],
-      "returns": "verified package records | install entries"
-    },
-    "platform_artifacts.py inspect-apple|check-export|installer-certificate|record-package|record-windows": {
-      "arguments": ["see the script header"],
-      "returns": "evidence JSON files; non-zero exit with a message when a check fails"
-    },
-    "publish_release.py": {
-      "arguments": ["--app release/app.json", "--version x.y.z", "--build n", "--apk path|-", "--icon path", "--screenshot path...", "--ipad-screenshots dir", "--changelog path"],
-      "returns": "a published GitHub Release with my-app.json, or exit 0 with nothing published when no target is switched on"
+  "openrpc": "1.3.2",
+  "info": {
+    "title": "ae/release-pipeline",
+    "version": "1.0.0",
+    "description": "Release pipeline: GitHub Actions workflows, build scripts and the application description, rendered at build time by the TypeScript module server/render.ts (methods tagged typescript), and the Python 3 scripts in server/scripts that the workflows run (methods tagged command; parameters are command-line arguments by position, the result is the exit status, and files named in the arguments are written). Secrets appear only as names of repository secrets. Environment of the scripts: STORE_APP_ID, STORE_BUILD_TOKEN, STORE_API (default https://ourapps.app), STORE_MODE (none: no store; every target in PIPELINE_TARGETS reads as on), PIPELINE_TARGETS, GITHUB_REPOSITORY, GH_TOKEN, WEB_URL, WEB_ZIP, TESTFLIGHT_URL, PLATFORM_PACKAGES_JSON, GITHUB_OUTPUT. The scripts read the store's switches from GET <STORE_API>/api/build/<STORE_APP_ID>/targets with a bearer token.",
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0"
     }
   },
-  "types": {
-    "ReleaseSettings": "{targets:string (ios android web macos windows tvos; spaces),applicationId:slug,applicationName:label,manifestUrl:address (the store, no path),storeCredentials?:secretRef (repository secrets <NAME>_APP_ID and <NAME>_BUILD_TOKEN; unset means no store call, no iOS or TestFlight job),bundleIdentifier?:qualified (required for ios, macos, tvos),androidSigning?:secretRef (<NAME>_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS, _KEY_PASSWORD; required for android),webDeploy?:secretRef (<NAME>_API_TOKEN, <NAME>_ACCOUNT_ID)}",
-    "ReleaseOptions": "{scriptsDirectory?,webDirectory?,androidDirectory?,desktopDirectory?,appleDirectory?,appleHelpers?,serverDirectory?,fixturesDirectory?,nodeVersion?,javaVersion?,macRunner?,windowsRunner?,wranglerMajor?,iconPath?,screenshots?,ipadScreenshots?,changelog?,description?,extra?:Record<string,unknown>,signingPrefix?,productName?,iosDevices?,macosMinimum?,tvosMinimum?}",
-    "environment": "STORE_APP_ID, STORE_BUILD_TOKEN, STORE_API (default https://ourapps.app), STORE_MODE (none: no store; reads PIPELINE_TARGETS as on), PIPELINE_TARGETS, GITHUB_REPOSITORY, GH_TOKEN, WEB_URL, WEB_ZIP, TESTFLIGHT_URL, PLATFORM_PACKAGES_JSON"
-  },
-  "rendered": {
-    ".github/workflows/release.yml": "version, android, web, ios, testflight, publish jobs for the targets built on every tag; each job reads its store switch first",
-    ".github/workflows/ci-web.yml": "web type check and build",
-    ".github/workflows/ci-android.yml": "Android unit tests",
-    ".github/workflows/ci-server.yml": "server type check and tests (when serverDirectory is given)",
-    ".github/workflows/platform-packages.yml": "unsigned Mac, Apple TV and Windows evidence (manual)",
-    ".github/workflows/apple-testflight.yml": "Mac and Apple TV TestFlight export (manual)",
-    "scripts/build-windows.sh, scripts/inspect-windows.ps1, scripts/build-apple-testflight.sh": "build scripts the workflows call",
-    "release/app.json": "the application description the publish step reads"
-  },
-  "requirements": {
-    "theme": "none: the release pipeline requires no interface"
+  "methods": [
+    {
+      "name": "renderRelease",
+      "description": "Renders release/app.json and, by target, release.yml (version, android, web, ios, testflight and publish jobs on every tag, each reading its store switch first), ci-web.yml, ci-android.yml, ci-server.yml (with serverDirectory), platform-packages.yml (unsigned Mac, Apple TV and Windows evidence), apple-testflight.yml, and the Windows and Apple build scripts.",
+      "params": [
+        {
+          "name": "settings",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ReleaseSettings"
+          }
+        },
+        {
+          "name": "options",
+          "required": false,
+          "schema": {
+            "$ref": "#/components/schemas/ReleaseOptions"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/RenderResult"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/SettingsError"
+        }
+      ],
+      "tags": [
+        {
+          "name": "typescript"
+        }
+      ]
+    },
+    {
+      "name": "writeRelease",
+      "description": "Writes each file under directory, creating folders, and marks the executable ones 0755. Throws the file system's error when a write fails.",
+      "params": [
+        {
+          "name": "directory",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "result",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/RenderResult"
+          }
+        }
+      ],
+      "result": {
+        "name": "none",
+        "description": "Returns nothing.",
+        "schema": {
+          "type": "null"
+        }
+      },
+      "tags": [
+        {
+          "name": "typescript"
+        }
+      ]
+    },
+    {
+      "name": "validateSettings",
+      "description": "Checks the settings and which secret references each target needs.",
+      "params": [
+        {
+          "name": "settings",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/ReleaseSettings"
+          }
+        }
+      ],
+      "result": {
+        "name": "resolved",
+        "schema": {
+          "$ref": "#/components/schemas/ResolvedRelease"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/SettingsError"
+        }
+      ],
+      "tags": [
+        {
+          "name": "typescript"
+        }
+      ]
+    },
+    {
+      "name": "parseTargets",
+      "description": "The targets named, in the order ios, android, web, macos, windows, tvos; unknown, repeated or no targets are errors.",
+      "params": [
+        {
+          "name": "value",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "targets",
+        "schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/Target"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/SettingsError"
+        }
+      ],
+      "tags": [
+        {
+          "name": "typescript"
+        }
+      ]
+    },
+    {
+      "name": "secretName",
+      "description": "The repository secret name for a reference: upper case, runs of other characters as one underscore, no leading or trailing underscore.",
+      "params": [
+        {
+          "name": "reference",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$"
+          }
+        }
+      ],
+      "result": {
+        "name": "name",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]+(_[A-Z0-9]+)*$"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/SettingsError"
+        }
+      ],
+      "tags": [
+        {
+          "name": "typescript"
+        }
+      ]
+    },
+    {
+      "name": "release_targets.py read",
+      "description": "Writes the store's switches (TargetSwitches) to out; with --github-output also writes each as true or false to GITHUB_OUTPUT.",
+      "params": [
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Output JSON file."
+          }
+        },
+        {
+          "name": "githubOutput",
+          "required": false,
+          "schema": {
+            "const": "--github-output"
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "release_targets.py check",
+      "description": "Writes on=true or on=false for the target to GITHUB_OUTPUT.",
+      "params": [
+        {
+          "name": "target",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/Target"
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "release_targets.py require",
+      "description": "Fails unless the target is switched on.",
+      "params": [
+        {
+          "name": "target",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/Target"
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 when switched on.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "release_targets.py merge",
+      "description": "Writes the application manifest for the release: a switched-off target keeps the previous release's install entry (or none; null for pwa, android and ios), and Windows keeps the previous entry when this release brings no Windows package. A path of - reads as an empty object.",
+      "params": [
+        {
+          "name": "new",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "ApplicationManifest JSON or -."
+          }
+        },
+        {
+          "name": "previous",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "ApplicationManifest JSON or -."
+          }
+        },
+        {
+          "name": "targets",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "TargetSwitches JSON or -."
+          }
+        },
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Output ApplicationManifest JSON."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "release_targets.py packages",
+      "description": "Writes the verified direct packages whose platform is switched on.",
+      "params": [
+        {
+          "name": "records",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Package records JSON."
+          }
+        },
+        {
+          "name": "targets",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "TargetSwitches JSON."
+          }
+        },
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Output JSON."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "release_targets.py publishes",
+      "description": "Exit 0 when this release builds ios, android or web switched on, or brings a switched-on package; else exit 3.",
+      "params": [
+        {
+          "name": "targets",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "TargetSwitches JSON."
+          }
+        },
+        {
+          "name": "records",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "description": "Package records JSON."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 or 3.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        },
+        {
+          "$ref": "#/components/errors/NothingSwitchedOn"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "app_manifest.py build",
+      "description": "Writes the validated application manifest (ApplicationManifest) from app.json (AppDescription) and the release inputs {version, iconUrl, apkUrl, webUrl, testflightUrl, screenshots, screenshotsByPlatform}.",
+      "params": [
+        {
+          "name": "app",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "AppDescription JSON."
+          }
+        },
+        {
+          "name": "inputs",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Release inputs JSON."
+          }
+        },
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Output manifest."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "app_manifest.py validate",
+      "description": "Applies the store's manifest checks.",
+      "params": [
+        {
+          "name": "manifest",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "ApplicationManifest JSON."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 when valid.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "platform_manifest.py validate",
+      "description": "Checks each verified Mac or Windows package record against its metadata (format, version, file name, sha256, size) and writes the verified records.",
+      "params": [
+        {
+          "name": "records",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Package records JSON."
+          }
+        },
+        {
+          "name": "version",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Output JSON."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "platform_manifest.py entries",
+      "description": "Writes the install entries (DirectPackage per platform) for the application manifest.",
+      "params": [
+        {
+          "name": "records",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Verified records JSON."
+          }
+        },
+        {
+          "name": "urls",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Uploaded asset addresses JSON."
+          }
+        },
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "Output JSON."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "platform_artifacts.py inspect-apple",
+      "description": "Reads an Xcode archive's application (architectures, versions, bundle identifier, platform, resources, signature) and writes the evidence.",
+      "params": [
+        {
+          "name": "platform",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "macos",
+              "tvos"
+            ]
+          }
+        },
+        {
+          "name": "archive",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "version",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "build",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "bundleId",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "appName",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "category",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "platform_artifacts.py check-export",
+      "description": "Refuses an export that is not a local App Store Connect export signed for this team and profile.",
+      "params": [
+        {
+          "name": "platform",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "macos",
+              "tvos",
+              "ios"
+            ]
+          }
+        },
+        {
+          "name": "exportOptions",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "ExportOptions.plist."
+          }
+        },
+        {
+          "name": "team",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "profile",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "bundleId",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "installerMetadata",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "description": "installer-metadata.json."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 when accepted.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "platform_artifacts.py installer-certificate",
+      "description": "Checks a Mac installer certificate belongs to the team.",
+      "params": [
+        {
+          "name": "certificate",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "certificate.cer."
+          }
+        },
+        {
+          "name": "team",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 when accepted.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "platform_artifacts.py record-package",
+      "description": "Writes the verified record of a Mac package from its metadata.",
+      "params": [
+        {
+          "name": "metadata",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "package",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "package.dmg."
+          }
+        },
+        {
+          "name": "out",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "platform_artifacts.py record-windows",
+      "description": "Copies the unsigned Windows installer and writes its evidence after reading the executable header.",
+      "params": [
+        {
+          "name": "desktopDirectory",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "outDirectory",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "filePrefix",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "executableName",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
+      "name": "publish_release.py",
+      "description": "Creates a GitHub Release with the icon, screenshots, changelog, signed APK, web bundle and my-app.json; reads the store's switches before writing and again before the manifest goes up; a switched-off target keeps the latest release's entry; a failed read leaves GitHub untouched. Exit 0 with nothing published when no target is switched on.",
+      "params": [
+        {
+          "name": "--app",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "release/app.json."
+          }
+        },
+        {
+          "name": "--version",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "--build",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "--apk",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "APK path or - for none."
+          }
+        },
+        {
+          "name": "--icon",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "--screenshot",
+          "description": "Repeatable.",
+          "required": false,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "name": "--ipad-screenshots",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "description": "Folder."
+          }
+        },
+        {
+          "name": "--changelog",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "--scripts",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "description": "Folder of the helper scripts."
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success or when nothing is published.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-name"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Target": {
+        "type": "string",
+        "enum": [
+          "ios",
+          "android",
+          "web",
+          "macos",
+          "windows",
+          "tvos"
+        ]
+      },
+      "ReleaseSettings": {
+        "type": "object",
+        "properties": {
+          "targets": {
+            "type": "string",
+            "description": "Any of ios, android, web, macos, windows, tvos, lower case, separated by spaces, each at most once, at least one.",
+            "pattern": "^\\s*(ios|android|web|macos|windows|tvos)(\\s+(ios|android|web|macos|windows|tvos))*\\s*$"
+          },
+          "applicationId": {
+            "type": "string",
+            "description": "Slug.",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "applicationName": {
+            "type": "string",
+            "description": "Label.",
+            "pattern": "^[A-Za-z][A-Za-z0-9 -]{0,63}$"
+          },
+          "manifestUrl": {
+            "type": "string",
+            "description": "The store's address with no path, for example https://ourapps.app; https, or http only for localhost and 127.0.0.1. A trailing slash is dropped.",
+            "pattern": "^(https://[A-Za-z0-9.-]+(:[0-9]{1,5})?|http://(localhost|127\\.0\\.0\\.1)(:[0-9]{1,5})?)/?$"
+          },
+          "storeCredentials": {
+            "type": "string",
+            "description": "Secret reference: repository secrets <NAME>_APP_ID and <NAME>_BUILD_TOKEN. Unset or empty: no store call, no iOS job and no Apple TestFlight workflow; every built target is on and the release still publishes to GitHub.",
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$|^$"
+          },
+          "bundleIdentifier": {
+            "type": "string",
+            "description": "Apple bundle identifier; required when targets include ios, macos or tvos.",
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$|^$"
+          },
+          "androidSigning": {
+            "type": "string",
+            "description": "Secret reference: <NAME>_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS, _KEY_PASSWORD. Required when targets include android.",
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$|^$"
+          },
+          "webDeploy": {
+            "type": "string",
+            "description": "Secret reference for hosting the web build on Cloudflare: <NAME>_API_TOKEN and <NAME>_ACCOUNT_ID; only with the web target. Unset: the web build is bundled as web.zip.",
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$|^$"
+          }
+        },
+        "required": [
+          "targets",
+          "applicationId",
+          "applicationName",
+          "manifestUrl"
+        ],
+        "additionalProperties": false,
+        "description": "The secret references that are set must give different secret names."
+      },
+      "ReleaseOptions": {
+        "type": "object",
+        "properties": {
+          "scriptsDirectory": {
+            "type": "string",
+            "description": "Where the shipped scripts are installed in the application repository; defaults to components/ourapps-release/server/scripts.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "webDirectory": {
+            "type": "string",
+            "description": "Defaults to web.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "androidDirectory": {
+            "type": "string",
+            "description": "Defaults to android.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "desktopDirectory": {
+            "type": "string",
+            "description": "Defaults to desktop.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "appleDirectory": {
+            "type": "string",
+            "description": "Defaults to ios.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "appleHelpers": {
+            "type": "string",
+            "description": "Where the Apple signing helpers live (not shipped here); defaults to scripts.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "serverDirectory": {
+            "type": "string",
+            "description": "Adds the server check workflow when given.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "fixturesDirectory": {
+            "type": "string",
+            "description": "Defaults to server/fixtures.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "nodeVersion": {
+            "type": "string",
+            "description": "Defaults to 22.",
+            "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$"
+          },
+          "javaVersion": {
+            "type": "string",
+            "description": "Defaults to 17.",
+            "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$"
+          },
+          "macRunner": {
+            "type": "string",
+            "description": "Defaults to macos-26.",
+            "pattern": "^[a-z][a-z0-9.-]{0,31}$"
+          },
+          "windowsRunner": {
+            "type": "string",
+            "description": "Defaults to windows-latest.",
+            "pattern": "^[a-z][a-z0-9.-]{0,31}$"
+          },
+          "wranglerMajor": {
+            "type": "string",
+            "description": "Defaults to 4.",
+            "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$"
+          },
+          "iconPath": {
+            "type": "string",
+            "description": "Defaults to art/icon.png.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "screenshots": {
+            "type": "string",
+            "description": "Glob; defaults to screenshots/*.png.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "ipadScreenshots": {
+            "type": "string",
+            "description": "Defaults to screenshots/ipad.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "changelog": {
+            "type": "string",
+            "description": "Defaults to CHANGELOG.md.",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./*-]*$"
+          },
+          "description": {
+            "type": "string",
+            "description": "Store description, 1 to 300 characters; defaults to applicationName.",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "extra": {
+            "type": "object",
+            "additionalProperties": {},
+            "description": "Fields copied into the application manifest as they are, for example { minPlayers: 2, maxPlayers: 9 }."
+          },
+          "signingPrefix": {
+            "type": "string",
+            "description": "Prefix of the environment variables carrying signing values; equals the Android and Apple hosts' prefix. Defaults to the last word of the bundle or application id in capitals.",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+          },
+          "productName": {
+            "type": "string",
+            "description": "Windows executable name without .exe; defaults to applicationName.",
+            "pattern": "^[A-Za-z][A-Za-z0-9 -]{0,63}$"
+          },
+          "iosDevices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Defaults to [iphone, ipad]."
+          },
+          "macosMinimum": {
+            "type": "string",
+            "description": "Defaults to 14.0.",
+            "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$"
+          },
+          "tvosMinimum": {
+            "type": "string",
+            "description": "Defaults to 17.0.",
+            "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "ResolvedRelease": {
+        "type": "object",
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            },
+            "description": "In the order ios, android, web, macos, windows, tvos.",
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "applicationId": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "applicationName": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9 -]{0,63}$"
+          },
+          "manifestUrl": {
+            "type": "string",
+            "description": "Without a trailing slash."
+          },
+          "storeCredentials": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$"
+          },
+          "bundleIdentifier": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$"
+          },
+          "androidSigning": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$"
+          },
+          "webDeploy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$"
+          }
+        },
+        "required": [
+          "targets",
+          "applicationId",
+          "applicationName",
+          "manifestUrl",
+          "storeCredentials",
+          "bundleIdentifier",
+          "androidSigning",
+          "webDeploy"
+        ],
+        "additionalProperties": false
+      },
+      "RenderResult": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "object",
+            "description": "Output path relative to the application repository to file text. Possible paths: release/app.json (always), .github/workflows/release.yml, ci-web.yml, ci-android.yml, ci-server.yml, platform-packages.yml, apple-testflight.yml, scripts/build-apple-testflight.sh, scripts/build-windows.sh, scripts/inspect-windows.ps1.",
+            "required": [
+              "release/app.json"
+            ],
+            "properties": {
+              "release/app.json": {
+                "type": "string",
+                "description": "AppDescription as JSON text."
+              }
+            },
+            "propertyNames": {
+              "enum": [
+                "release/app.json",
+                ".github/workflows/release.yml",
+                ".github/workflows/ci-web.yml",
+                ".github/workflows/ci-android.yml",
+                ".github/workflows/ci-server.yml",
+                ".github/workflows/platform-packages.yml",
+                ".github/workflows/apple-testflight.yml",
+                "scripts/build-apple-testflight.sh",
+                "scripts/build-windows.sh",
+                "scripts/inspect-windows.ps1"
+              ]
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "executable": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files that must be executable."
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Things the rendered files call that this package does not ship, and files not rendered and why."
+          }
+        },
+        "required": [
+          "files",
+          "executable",
+          "notes"
+        ],
+        "additionalProperties": false
+      },
+      "AppDescription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "bundleId": {
+            "type": "string",
+            "description": "Present with Apple targets.",
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            }
+          },
+          "iosDevices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "macos": {
+            "type": "object",
+            "properties": {
+              "minOsVersion": {
+                "type": "string"
+              },
+              "architectures": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "arm64",
+                    "x64"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "minOsVersion",
+              "architectures"
+            ],
+            "additionalProperties": false
+          },
+          "tvos": {
+            "type": "object",
+            "properties": {
+              "minOsVersion": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "minOsVersion"
+            ],
+            "additionalProperties": false
+          },
+          "extra": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "targets",
+          "iosDevices",
+          "macos",
+          "tvos",
+          "extra"
+        ],
+        "additionalProperties": false,
+        "description": "release/app.json: the application description the publish step reads."
+      },
+      "TargetSwitches": {
+        "type": "object",
+        "properties": {
+          "ios": {
+            "type": "boolean"
+          },
+          "android": {
+            "type": "boolean"
+          },
+          "web": {
+            "type": "boolean"
+          },
+          "macos": {
+            "type": "boolean"
+          },
+          "windows": {
+            "type": "boolean"
+          },
+          "tvos": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ios",
+          "android",
+          "web",
+          "macos",
+          "windows",
+          "tvos"
+        ],
+        "additionalProperties": false,
+        "description": "The store's per-target switches, limited to PIPELINE_TARGETS when set."
+      },
+      "ApplicationManifest": {
+        "type": "object",
+        "description": "my-app.json schema 1, as app_manifest.py build writes and validate accepts. Fields of app.json extra appear at the top level.",
+        "required": [
+          "schema",
+          "id",
+          "name",
+          "version",
+          "description",
+          "icon",
+          "screenshots",
+          "install"
+        ],
+        "properties": {
+          "schema": {
+            "const": 1
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "icon": {
+            "type": "string",
+            "description": "https address.",
+            "format": "uri",
+            "pattern": "^https://"
+          },
+          "screenshots": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "https address.",
+              "format": "uri",
+              "pattern": "^https://"
+            }
+          },
+          "screenshotsByPlatform": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "iphone",
+                "ipad",
+                "android",
+                "web",
+                "macos",
+                "windows",
+                "tvos"
+              ]
+            },
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "https address.",
+                "format": "uri",
+                "pattern": "^https://"
+              }
+            }
+          },
+          "install": {
+            "type": "object",
+            "description": "At least one entry is not null.",
+            "properties": {
+              "pwa": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "https address.",
+                "format": "uri",
+                "pattern": "^https://"
+              },
+              "android": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "apk": {
+                        "type": "string",
+                        "description": "https address.",
+                        "format": "uri",
+                        "pattern": "^https://"
+                      }
+                    },
+                    "required": [
+                      "apk"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ios": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "bundleId": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "testflight": {
+                        "type": "string",
+                        "description": "https address.",
+                        "format": "uri",
+                        "pattern": "^https://"
+                      },
+                      "devices": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "bundleId",
+                      "testflight"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "tvos": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "bundleId": {
+                        "type": "string"
+                      },
+                      "minOsVersion": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "bundleId",
+                      "minOsVersion"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "macos": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "packages": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/DirectPackage"
+                        }
+                      },
+                      "testflight": {
+                        "type": "object",
+                        "properties": {
+                          "bundleId": {
+                            "type": "string"
+                          },
+                          "minOsVersion": {
+                            "type": "string"
+                          },
+                          "architectures": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "arm64",
+                                "x64"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "bundleId",
+                          "minOsVersion",
+                          "architectures"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "windows": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "packages": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/DirectPackage"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "DirectPackage": {
+        "type": "object",
+        "description": "A verified Mac (format dmg, with notarization) or Windows (format exe, without notarization) package entry.",
+        "required": [
+          "url",
+          "format",
+          "signing",
+          "architectures",
+          "minOsVersion"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "https address.",
+            "format": "uri",
+            "pattern": "^https://"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "dmg",
+              "exe"
+            ]
+          },
+          "signing": {
+            "type": "string",
+            "enum": [
+              "unsigned",
+              "signed"
+            ]
+          },
+          "notarization": {
+            "type": "string",
+            "enum": [
+              "notarized",
+              "not-notarized"
+            ],
+            "description": "Mac only; an unsigned package is not-notarized."
+          },
+          "architectures": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "arm64",
+                "x64"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "minOsVersion": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "errors": {
+      "SettingsError": {
+        "code": 1,
+        "message": "SettingsError",
+        "data": {
+          "type": "string",
+          "description": "Names the setting, option or template problem."
+        }
+      },
+      "CommandFailed": {
+        "code": 2,
+        "message": "The command exits with status 1 and prints the reason on standard error",
+        "data": {
+          "type": "string",
+          "description": "The reason line, prefixed with the script name."
+        }
+      },
+      "NothingSwitchedOn": {
+        "code": 3,
+        "message": "Nothing in this release is switched on in the store (exit status 3); nothing is published"
+      }
+    }
   }
 }
