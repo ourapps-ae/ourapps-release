@@ -2,7 +2,7 @@
   "format": 1,
   "dependencies": [],
   "tools": {
-    "node": "26.5.0",
-    "python3": "3.12.8"
+    "node": "26.5",
+    "python3": "3.12"
   }
 }

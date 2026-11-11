@@ -345,7 +345,7 @@
     "name": "ourapps-ae/ourapps-release",
     "sourceRevision": "19905b75dbea89fbfd424d67fe26c81aaed0e018",
     "sourceTreeDigest": "0000000000000000000000000000000000000000000000000000000000000000",
-    "version": "0.4.0"
+    "version": "0.4.1"
   },
   "infrastructure": {
     "accounts": [
@@ -396,8 +396,8 @@
       "scope": "required-local",
       "timeoutSeconds": 240,
       "tools": {
-        "node": "26.5.0",
-        "python3": "3.12.8"
+        "node": "26.5",
+        "python3": "3.12"
       }
     }
   ],
