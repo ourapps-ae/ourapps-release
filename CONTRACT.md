@@ -37,7 +37,7 @@ The installer collects `targets` (any of `ios`, `android`, `web`, `macos`, `wind
 - `implementation/server/templates/workflows/release.yml.template` -> `components/ourapps-release/server/templates/workflows/release.yml.template`
 
 Dependencies: none.
-`tools.lock.json` pins verification tools: node 26.5.0, python3 3.12.8. Licence wording remains deferred.
+`tools.lock.json` pins verification tools: node 26.5, python3 3.12. Licence wording remains deferred.
 
 ## Provided interfaces
 - `interfaces/release-pipeline.json` defines `release-pipeline` (ae/release-pipeline) version 1.0.0 as an OpenRPC 1.3.2 document. Methods tagged `typescript` are the build-time functions of `server/render.ts` (`renderRelease`, `writeRelease`, `validateSettings`, `parseTargets`, `secretName`); methods tagged `command` are the subcommands of the Python scripts the workflows run (`release_targets.py read`, `app_manifest.py build`, `publish_release.py` and the others), with command-line arguments as parameters and the exit status as result. Settings, render result, `release/app.json`, the store's target switches and `my-app.json` are JSON Schema 2020-12 under `components.schemas`.
@@ -57,7 +57,7 @@ Everything runs in the application's GitHub Actions on the runners named in the 
 ## Verification
 `node --test tests/release.test.ts` renders every target combination and checks the workflows (jobs, needs, guard order, secrets only as names, options refused when unsafe), parses them as YAML when PyYAML is installed, runs `bash -n` on the scripts, builds a manifest from the rendered application description, and runs `tests/test_release.py`: the store's switches against a local stand-in server (including refused redirects and malformed answers), manifest merging, manifest building and validation, verified package checks, Apple export and archive checks with stand-in `xcrun` and `codesign`, Windows installer evidence from a synthetic executable header, and the publisher end to end with a stand-in `gh` (switched-off targets, switches changing during the run, first release, draft removal, upload order). Without store credentials the suite renders the whole target set and checks that no file names a store secret, address, route or TestFlight step, that the workflows parse and have the expected jobs, and runs the target reader and publisher with `STORE_MODE=none` against the stand-in server, which must see no request. Real GitHub Actions runs, a real store, `gh`, signing, notarization, TestFlight and the Apple, Windows and Android builds were not exercised, and `installer-certificate` (needs `openssl`) is untested.
 
-- `node --test tests/release.test.ts` (release, required-local; tools: node 26.5.0, python3 3.12.8)
+- `node --test tests/release.test.ts` (release, required-local; tools: node 26.5, python3 3.12)
 
 ## Scenarios and presentation
 A web-only application renders a release workflow with only the version, web and publish jobs; adding Android adds its signing secrets and job. An application with no store account leaves `storeCredentials` unset: the release builds Android and web from the pipeline targets and publishes to GitHub, and iPhone, Mac and Apple TV signed uploads are not rendered (unsigned Mac and Apple TV evidence is). A store owner switches Android off: the next release keeps the last APK entry in the manifest. Everything is switched off during a run: the draft release is deleted and nothing is published. A verified Windows package is uploaded and listed only when its target is switched on.

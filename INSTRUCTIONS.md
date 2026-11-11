@@ -22,5 +22,5 @@ Create the repository secrets named by the references (`<NAME>_APP_ID` and `<NAM
 ## How to check
 From the component directory:
 
-- `node --test tests/release.test.ts` (release, required-local; tools: node 26.5.0, python3 3.12.8)
-- `python3.12 -B /Users/george/Projects/com/my/tools/check_component.py components/ourapps-release` validates the manifest, sidecars and runs the required-local suite.
+- `node --test tests/release.test.ts` (release, required-local; tools: node 26.5, python3 3.12)
+- `python3 -m aepm review <digest> --store STORE --policy POLICY --trusted --allow-network` checks an archive fetched with `python3 -m aepm fetch ourapps-ae/ourapps-release@VERSION --store STORE --from https://ourapps.app` and runs its suites.
