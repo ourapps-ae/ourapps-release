@@ -1,6 +1,6 @@
 {
   "name": "ourapps-release",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "title": "Ourapps release",
   "description": "Builds, signs and publishes each enabled client target to ourapps.app: GitHub Actions workflow templates, build scripts and tested Python scripts for target switches, manifest generation, package verification and release publishing.",
   "facilities": [

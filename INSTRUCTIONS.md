@@ -3,7 +3,7 @@
 ## For the agent
 Select `ourapps-ae/ourapps-release` for every recipe that has a client target; set `targets` from the targets answer (map the recipe's `ios` to `ios`, `macos` to `macos`, and so on). Set `storeCredentials` only when the developer has a store account (the recipe's updates question supplies it); leave it `none` otherwise and the pipeline skips every store step. Give each reference setting as a reference name (for example `<application>-store`), never a value, and tell the developer which repository secrets that creates. Set `repository` to `https://github.com/<owner>/<name>` and `manifestUrl` to `https://api.github.com/repos/<owner>/<name>/releases/latest` when the repository is known. Use the same signing prefix as android-host and apple-host.
 
-- Select package `ourapps-ae/ourapps-release` version `0.4.1`.
+- Select package `ourapps-ae/ourapps-release` version `0.5.0`.
 - Settings to configure:
   - `targets` (string, label; required)
   - `applicationId` (string, slug; required)

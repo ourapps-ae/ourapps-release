@@ -403,7 +403,7 @@
     "name": "ourapps-ae/ourapps-release",
     "sourceRevision": "19905b75dbea89fbfd424d67fe26c81aaed0e018",
     "sourceTreeDigest": "0000000000000000000000000000000000000000000000000000000000000000",
-    "version": "0.4.1"
+    "version": "0.5.0"
   },
   "infrastructure": {
     "accounts": [
