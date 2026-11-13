@@ -1836,5 +1836,8 @@
         "message": "Nothing in this release is switched on in the store (exit status 3); nothing is published"
       }
     }
+  },
+  "x-ourapps-modules": {
+    "server": "server/index.ts"
   }
 }

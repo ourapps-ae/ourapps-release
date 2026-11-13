@@ -1,6 +1,12 @@
 {
   "artefacts": [
     {
+      "destination": "components/ourapps-release/server/index.ts",
+      "executable": false,
+      "source": "implementation/server/index.ts",
+      "template": false
+    },
+    {
       "destination": "components/ourapps-release/server/release.json",
       "executable": false,
       "source": "implementation/server/release.json",
@@ -107,6 +113,7 @@
     "hosts": [],
     "secrets": [],
     "writes": [
+      "components/ourapps-release/server/index.ts",
       "components/ourapps-release/server/release.json",
       "components/ourapps-release/server/render.ts",
       "components/ourapps-release/server/scripts/app_manifest.py",
@@ -252,6 +259,10 @@
     {
       "executable": false,
       "path": "examples/consumer.ts"
+    },
+    {
+      "executable": false,
+      "path": "implementation/server/index.ts"
     },
     {
       "executable": false,
