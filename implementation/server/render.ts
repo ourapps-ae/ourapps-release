@@ -12,20 +12,26 @@ export interface ReleaseSettings {
   targets: string;
   applicationId: string;
   applicationName: string;
-  // The store's address, for example https://ourapps.app. Its /api/build/<id>/... routes carry the target switches,
-  // signing answers and uploads, and it reads my-app.json from the GitHub Release.
-  manifestUrl: string;
-  // Secret reference for the store credentials: repository secrets <NAME>_APP_ID and <NAME>_BUILD_TOKEN.
-  // Optional. Without it the pipeline makes no store call: every target the pipeline builds is on, the iPhone build
-  // and TestFlight upload (which sign and upload through the store) and the Apple TestFlight workflow are not rendered,
-  // and the release still publishes to GitHub.
+  // The store's address (default https://ourapps.app). Its /api/build/<id>/... routes carry the target switches, signing
+  // answers and uploads.
+  storeAddress?: string;
+  // Where the store reads my-app.json: the repository's latest release, https://api.github.com/repos/<owner>/<name>/releases/latest.
+  manifestUrl?: string;
+  // The application's repository, https://github.com/<owner>/<name>.
+  repository?: string;
+  // Reference name for the store credentials: repository secrets <NAME>_APP_ID and <NAME>_BUILD_TOKEN.
+  // Optional ("none" or empty is unset). Without it the pipeline makes no store call: every target the pipeline builds is on,
+  // the iPhone build and TestFlight upload (which sign and upload through the store) and the Apple TestFlight workflow are
+  // not rendered, and the release still publishes to GitHub.
   storeCredentials?: string;
   // Apple bundle identifier; required for ios, macos and tvos.
   bundleIdentifier?: string;
   // Secret reference for Android signing: <NAME>_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS, _KEY_PASSWORD. Required for android.
   androidSigning?: string;
-  // Secret reference for hosting the web build on Cloudflare: <NAME>_API_TOKEN and <NAME>_ACCOUNT_ID. Without it the web build is bundled as web.zip.
+  // Reference name for hosting the web build on Cloudflare: <NAME>_API_TOKEN and <NAME>_ACCOUNT_ID. Without it the web build is bundled as web.zip.
   webDeploy?: string;
+  // Reference name for the Cloudflare account the server deploys to: <NAME>_API_TOKEN and <NAME>_ACCOUNT_ID.
+  hostingAccount?: string;
 }
 
 export interface ReleaseOptions {
@@ -67,6 +73,9 @@ const SLUG = /^[a-z][a-z0-9-]{0,63}$/;
 const LABEL = /^[A-Za-z][A-Za-z0-9 -]{0,63}$/;
 const QUALIFIED = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/;
 const ADDRESS = /^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/;
+const REPOSITORY = /^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_-]+$/;
+const RELEASE_ADDRESS = /^https:\/\/api\.github\.com\/repos\/[A-Za-z0-9-]+\/[A-Za-z0-9_-]+\/releases\/latest$/;
+const DEFAULT_STORE = "https://ourapps.app";
 const SECRET_REFERENCE = /^[A-Za-z][A-Za-z0-9_./-]{0,127}$/;
 const PATH = /^[A-Za-z0-9_][A-Za-z0-9_./*-]*$/;
 const VERSION = /^[0-9]{1,3}(\.[0-9]{1,3}){0,2}$/;
@@ -76,11 +85,14 @@ export interface ResolvedRelease {
   targets: Target[];
   applicationId: string;
   applicationName: string;
-  manifestUrl: string;
+  storeAddress: string;
+  manifestUrl: string | null;
+  repository: string | null;
   storeCredentials: string | null;
   bundleIdentifier: string | null;
   androidSigning: string | null;
   webDeploy: string | null;
+  hostingAccount: string | null;
 }
 
 export function parseTargets(value: string): Target[] {
@@ -105,14 +117,15 @@ export function validateSettings(settings: ReleaseSettings): ResolvedRelease {
   const targets = parseTargets(settings.targets);
   if (typeof settings.applicationId !== "string" || !SLUG.test(settings.applicationId)) throw new SettingsError("applicationId must be a slug");
   if (typeof settings.applicationName !== "string" || !LABEL.test(settings.applicationName)) throw new SettingsError("applicationName must be a label");
-  if (typeof settings.manifestUrl !== "string" || !ADDRESS.test(settings.manifestUrl.replace(/\/$/, ""))) throw new SettingsError("manifestUrl must be an http or https address without a path");
-  const manifestUrl = settings.manifestUrl.replace(/\/$/, "");
-  if (!manifestUrl.startsWith("https://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(manifestUrl)) throw new SettingsError("manifestUrl must use https (http only for localhost)");
-  let storeCredentials: string | null = null;
-  if (settings.storeCredentials !== undefined && settings.storeCredentials !== "") {
-    secretName(settings.storeCredentials);
-    storeCredentials = settings.storeCredentials;
-  }
+  const store = settings.storeAddress ?? DEFAULT_STORE;
+  if (typeof store !== "string" || !ADDRESS.test(store.replace(/\/$/, ""))) throw new SettingsError("storeAddress must be an http or https address without a path");
+  const storeAddress = store.replace(/\/$/, "");
+  if (!storeAddress.startsWith("https://") && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(storeAddress)) throw new SettingsError("storeAddress must use https (http only for localhost)");
+  const manifestUrl = given(settings.manifestUrl);
+  if (manifestUrl !== null && !RELEASE_ADDRESS.test(manifestUrl)) throw new SettingsError("manifestUrl must be https://api.github.com/repos/<owner>/<name>/releases/latest");
+  const repository = given(settings.repository);
+  if (repository !== null && !REPOSITORY.test(repository)) throw new SettingsError("repository must be https://github.com/<owner>/<name>");
+  const storeCredentials = reference(settings.storeCredentials);
   const apple = targets.some((target) => target === "ios" || target === "macos" || target === "tvos");
   let bundleIdentifier: string | null = null;
   if (settings.bundleIdentifier !== undefined && settings.bundleIdentifier !== "") {
@@ -121,22 +134,28 @@ export function validateSettings(settings: ReleaseSettings): ResolvedRelease {
   } else if (apple) {
     throw new SettingsError("bundleIdentifier is required for ios, macos and tvos");
   }
-  let androidSigning: string | null = null;
-  if (settings.androidSigning !== undefined && settings.androidSigning !== "") {
-    secretName(settings.androidSigning);
-    androidSigning = settings.androidSigning;
-  } else if (targets.includes("android")) {
-    throw new SettingsError("androidSigning, the secret reference for the signing key, is required for android");
-  }
-  let webDeploy: string | null = null;
-  if (settings.webDeploy !== undefined && settings.webDeploy !== "") {
-    secretName(settings.webDeploy);
-    if (!targets.includes("web")) throw new SettingsError("webDeploy is only for the web target");
-    webDeploy = settings.webDeploy;
-  }
-  const names = [storeCredentials, androidSigning, webDeploy].filter((ref): ref is string => ref !== null).map(secretName);
+  const androidSigning = reference(settings.androidSigning);
+  if (androidSigning === null && targets.includes("android")) throw new SettingsError("androidSigning, the secret reference for the signing key, is required for android");
+  const webDeploy = reference(settings.webDeploy);
+  if (webDeploy !== null && !targets.includes("web")) throw new SettingsError("webDeploy is only for the web target");
+  const hostingAccount = reference(settings.hostingAccount);
+  const names = [storeCredentials, androidSigning, webDeploy, hostingAccount].filter((ref): ref is string => ref !== null).map(secretName);
   if (new Set(names).size !== names.length) throw new SettingsError("secret references must name different secrets");
-  return { targets, applicationId: settings.applicationId, applicationName: settings.applicationName, manifestUrl, storeCredentials, bundleIdentifier, androidSigning, webDeploy };
+  return { targets, applicationId: settings.applicationId, applicationName: settings.applicationName, storeAddress, manifestUrl, repository,
+    storeCredentials, bundleIdentifier, androidSigning, webDeploy, hostingAccount };
+}
+
+// An optional text setting: unset, empty or "none" is null.
+function given(value: string | undefined): string | null {
+  if (value === undefined || value === "" || value === "none") return null;
+  if (typeof value !== "string") throw new SettingsError("settings are text");
+  return value;
+}
+
+function reference(value: string | undefined): string | null {
+  const name = given(value);
+  if (name !== null) secretName(name);
+  return name;
 }
 
 // Template language: @@name@@ inserts a value; a line holding only @@if flag@@ ... @@end@@ keeps the lines between when the flag is set;
@@ -232,7 +251,7 @@ export function renderRelease(settings: ReleaseSettings, options: ReleaseOptions
   const flags = new Set<string>([...piped, ...(apple ? ["apple"] : []), ...(cloudflare ? ["cloudflare"] : []), ...(server ? ["server"] : []), stored ? "store" : "nostore"]);
   const desktopPlatforms = (["macos", "tvos", "windows"] as const).filter(has);
   const values: Record<string, string> = {
-    targets: resolved.targets.join(" "), pipelineTargets: piped.join(" "), applicationId: resolved.applicationId, storeApi: resolved.manifestUrl, scripts: o.scripts,
+    targets: resolved.targets.join(" "), pipelineTargets: piped.join(" "), applicationId: resolved.applicationId, storeApi: resolved.storeAddress, scripts: o.scripts,
     secretsList: [...(stored ? [`store credentials ${resolved.storeCredentials}`] : []), ...(resolved.androidSigning ? [`Android signing ${resolved.androidSigning}`] : []), ...(resolved.webDeploy ? [`web hosting ${resolved.webDeploy}`] : [])].join(", ") || "none",
     storeCredentialsRef: resolved.storeCredentials ?? "", androidSigningRef: resolved.androidSigning ?? "", webDeployRef: resolved.webDeploy ?? "",
     storeAppId: `${store}_APP_ID`, storeToken: `${store}_BUILD_TOKEN`,

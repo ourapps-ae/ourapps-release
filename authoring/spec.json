@@ -41,7 +41,7 @@
       "secret": false
     },
     {
-      "id": "manifestUrl",
+      "id": "storeAddress",
       "type": "string",
       "grammar": "address",
       "required": false,
@@ -49,11 +49,26 @@
       "default": "https://ourapps.app"
     },
     {
+      "id": "manifestUrl",
+      "type": "string",
+      "grammar": "address",
+      "required": false,
+      "secret": false
+    },
+    {
+      "id": "repository",
+      "type": "string",
+      "grammar": "address",
+      "required": false,
+      "secret": false
+    },
+    {
       "id": "storeCredentials",
       "type": "string",
-      "grammar": "identifier",
+      "grammar": "slug",
       "required": false,
-      "secret": true
+      "secret": false,
+      "default": "none"
     },
     {
       "id": "bundleIdentifier",
@@ -65,16 +80,26 @@
     {
       "id": "androidSigning",
       "type": "string",
-      "grammar": "identifier",
+      "grammar": "slug",
       "required": false,
-      "secret": true
+      "secret": false,
+      "default": "none"
     },
     {
       "id": "webDeploy",
       "type": "string",
-      "grammar": "identifier",
+      "grammar": "slug",
       "required": false,
-      "secret": true
+      "secret": false,
+      "default": "none"
+    },
+    {
+      "id": "hostingAccount",
+      "type": "string",
+      "grammar": "slug",
+      "required": false,
+      "secret": false,
+      "default": "none"
     }
   ],
   "dependencies": [],
@@ -109,13 +134,13 @@
   },
   "text": {
     "purpose": "The release side of an application. It renders GitHub Actions workflows and build scripts for the enabled client targets (web, Android, iPhone and iPad, Mac, Apple TV, Windows) and ships the scripts those workflows run: the store's per-target switches read fail-closed and merged into the manifest (a switched-off target keeps the previous release's entry), the application manifest (`my-app.json`, schema 1) built and validated, verified direct Mac and Windows packages checked against their metadata, Apple archive and export checks, Windows installer evidence, and the publisher that creates a draft GitHub Release, uploads every asset and makes the manifest the last upload before the draft goes public.",
-    "userInputs": "The installer collects `targets` (any of `ios`, `android`, `web`, `macos`, `windows`, `tvos`, separated by spaces), `applicationId`, `applicationName`, `manifestUrl` (the store's address, default `https://ourapps.app`) and `bundleIdentifier` (required for Apple targets). Three settings are secret references, never values: `storeCredentials` (optional; repository secrets `<NAME>_APP_ID` and `<NAME>_BUILD_TOKEN`; when unset the rendered pipeline makes no store call: every target the pipeline builds is on, no iPhone job, TestFlight job or Apple TestFlight workflow is rendered (they sign and upload through the store), the store-release trigger is left out, and the release still publishes to GitHub with `STORE_MODE: \"none\"`), `androidSigning` (required for Android: `<NAME>_KEYSTORE_BASE64`, `_KEYSTORE_PASSWORD`, `_KEY_ALIAS`, `_KEY_PASSWORD`) and `webDeploy` (optional Cloudflare hosting for the web build: `<NAME>_API_TOKEN`, `<NAME>_ACCOUNT_ID`). A reference such as `store/demo` names the secret `STORE_DEMO_...`; the pipeline's secret store supplies the values.",
-    "integration": "At build time call `renderRelease(settings, options)` from `server/render.ts` and write the result with `writeRelease` into the application repository: `.github/workflows/*.yml`, `scripts/*` and `release/app.json`. The shipped Python scripts install under `components/ourapps-release/server/scripts/` and are what the workflows call. `options` names the application's directories (web, android, desktop, Apple), the Node and Java versions, runners, the icon, screenshots, changelog, extra manifest fields (for example `minPlayers`) and the signing prefix, which must equal the Android and Apple hosts' prefix. `result.notes` lists what the rendered files expect the repository to provide. The web build comes from web-host, the Android project from android-host, the Apple project from apple-host, the Windows package from windows-desktop and the server check from server-host; this component names them only through directories and environment variable prefixes. `examples/consumer.ts` renders a pipeline without a game.",
-    "infrastructure": "Everything runs in the application's GitHub Actions on the runners named in the options (Ubuntu for web, Android, publishing; macOS for iOS, Mac and Apple TV; Windows for the Windows installer). When store credentials are set, the store at `manifestUrl` is read for target switches and signing, and receives TestFlight uploads; it reads `my-app.json` from the GitHub Release. Without them the store is never called. GitHub Actions minutes, macOS runner minutes and store terms were not checked and no cost is stated.",
+    "userInputs": "The installer collects `targets` (any of `ios`, `android`, `web`, `macos`, `windows`, `tvos`, separated by spaces), `applicationId`, `applicationName`, `bundleIdentifier` (required for Apple targets), `storeAddress` (the store's address, default `https://ourapps.app`), `repository` (the application's repository, `https://github.com/<owner>/<name>`) and `manifestUrl` (where the store reads `my-app.json`: the repository's latest release, `https://api.github.com/repos/<owner>/<name>/releases/latest`). Four settings are reference names, never values (letters, digits and hyphens; default `none`, which is unset): `storeCredentials` (repository secrets `<NAME>_APP_ID` and `<NAME>_BUILD_TOKEN`; without them the pipeline makes no store call: every target the pipeline builds is on, there is no iPhone build, TestFlight upload or Apple TestFlight run, and the release still publishes to GitHub with `STORE_MODE: \"none\"`), `androidSigning` (`<NAME>_KEYSTORE_BASE64`, `_KEYSTORE_PASSWORD`, `_KEY_ALIAS`, `_KEY_PASSWORD`), `webDeploy` (Cloudflare hosting for the web build: `<NAME>_API_TOKEN`, `<NAME>_ACCOUNT_ID`) and `hostingAccount` (the Cloudflare account the server deploys to: `<NAME>_API_TOKEN`, `<NAME>_ACCOUNT_ID`). A reference such as `demo-android-signing` names the secrets `DEMO_ANDROID_SIGNING_...`; the repository's secret store holds the values. They are plain settings because a template cannot render a secret setting.",
+    "integration": "At build time call `renderRelease(settings, options)` from `server/render.ts` and write the result with `writeRelease` into the application repository: `.github/workflows/*.yml`, `scripts/*` and `release/app.json`. The shipped Python scripts install under `components/ourapps-release/server/scripts/` and are what the workflows call. `options` names the application's directories (web, android, desktop, Apple), the Node and Java versions, runners, the icon, screenshots, changelog, extra manifest fields (for example `minPlayers`) and the signing prefix, which must equal the Android and Apple hosts' prefix. `result.notes` lists what the rendered files expect the repository to provide. The web build comes from web-host, the Android project from android-host, the Apple project from apple-host, the Windows package from windows-desktop and the server check from server-host; this component names them only through directories and environment variable prefixes. `examples/consumer.ts` renders a pipeline without a game. At install aepm renders `components/ourapps-release/server/release.json` from the settings (application id and name, targets, store address and the four reference names); in the application's release workflow `release_plan.py` reads it and gives the version, the targets to build and the repository secret name of each reference. aepm places only the recipe's own files outside `components/<name>/`, so a recipe that installs workflows at the application root ships them itself and has them call these scripts; `renderRelease` writes a set from the templates at build time instead.",
+    "infrastructure": "Everything runs in the application's GitHub Actions on the runners named in the options (Ubuntu for web, Android, publishing; macOS for iOS, Mac and Apple TV; Windows for the Windows installer). When store credentials are set, the store at `storeAddress` is read for target switches and signing, and receives TestFlight uploads; it reads `my-app.json` from the GitHub Release. Without them the store is never called. GitHub Actions minutes, macOS runner minutes and store terms were not checked and no cost is stated.",
     "verification": "`node --test tests/release.test.ts` renders every target combination and checks the workflows (jobs, needs, guard order, secrets only as names, options refused when unsafe), parses them as YAML when PyYAML is installed, runs `bash -n` on the scripts, builds a manifest from the rendered application description, and runs `tests/test_release.py`: the store's switches against a local stand-in server (including refused redirects and malformed answers), manifest merging, manifest building and validation, verified package checks, Apple export and archive checks with stand-in `xcrun` and `codesign`, Windows installer evidence from a synthetic executable header, and the publisher end to end with a stand-in `gh` (switched-off targets, switches changing during the run, first release, draft removal, upload order). Without store credentials the suite renders the whole target set and checks that no file names a store secret, address, route or TestFlight step, that the workflows parse and have the expected jobs, and runs the target reader and publisher with `STORE_MODE=none` against the stand-in server, which must see no request. Real GitHub Actions runs, a real store, `gh`, signing, notarization, TestFlight and the Apple, Windows and Android builds were not exercised, and `installer-certificate` (needs `openssl`) is untested.",
     "scenarios": "A web-only application renders a release workflow with only the version, web and publish jobs; adding Android adds its signing secrets and job. An application with no store account leaves `storeCredentials` unset: the release builds Android and web from the pipeline targets and publishes to GitHub, and iPhone, Mac and Apple TV signed uploads are not rendered (unsigned Mac and Apple TV evidence is). A store owner switches Android off: the next release keeps the last APK entry in the manifest. Everything is switched off during a run: the draft release is deleted and nothing is published. A verified Windows package is uploaded and listed only when its target is switched on.",
     "updates": "Patch updates replace the owned files; render the pipeline again after each update and review the diff, because the workflows are generated files. No application data is held; the manifest of the previous release is read from GitHub at publish time. Removal deletes the owned sources; the rendered workflows and scripts in the application repository remain until the owner deletes them."
   },
-  "agentInstructions": "Select `ourapps-ae/ourapps-release` for every recipe that has a client target; set `targets` from the targets answer (map the recipe's `ios` to `ios`, `macos` to `macos`, and so on). Set `storeCredentials` only when the developer has a store account (the recipe's updates question supplies it); leave it unset otherwise and the pipeline skips every store step. Give each secret setting as a reference name (for example `store/<application>`), never a value, and tell the developer which repository secrets that creates. Use the same signing prefix as android-host and apple-host.",
+  "agentInstructions": "Select `ourapps-ae/ourapps-release` for every recipe that has a client target; set `targets` from the targets answer (map the recipe's `ios` to `ios`, `macos` to `macos`, and so on). Set `storeCredentials` only when the developer has a store account (the recipe's updates question supplies it); leave it `none` otherwise and the pipeline skips every store step. Give each reference setting as a reference name (for example `<application>-store`), never a value, and tell the developer which repository secrets that creates. Set `repository` to `https://github.com/<owner>/<name>` and `manifestUrl` to `https://api.github.com/repos/<owner>/<name>/releases/latest` when the repository is known. Use the same signing prefix as android-host and apple-host.",
   "developerInstructions": "Create the repository secrets named by the references (`<NAME>_APP_ID` and `<NAME>_BUILD_TOKEN` from the store, only when `storeCredentials` is set; for Android a keystore as base64 plus its password, alias and key password; for Cloudflare web hosting an API token and account id, on an account separate from the store's). Provide `CHANGELOG.md` with a section for each released version, the icon and screenshots, and the Apple and desktop build scripts named in `result.notes`. Run the render step, commit the generated files, then push a `v*` tag. To check, run the commands below."
 }

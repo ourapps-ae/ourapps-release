@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "applicationId": "{{applicationId}}",
+  "applicationName": "{{applicationName}}",
+  "targets": "{{targets}}",
+  "storeAddress": "{{storeAddress}}",
+  "storeCredentials": "{{storeCredentials}}",
+  "androidSigning": "{{androidSigning}}",
+  "webDeploy": "{{webDeploy}}",
+  "hostingAccount": "{{hostingAccount}}"
+}

@@ -173,6 +173,51 @@
       ]
     },
     {
+      "name": "release_plan.py",
+      "description": "What one run of the release workflow builds, from release.json (rendered at install from the settings): version and build, the pushed tag, the targets built, one true or false per named target, the store address, and the repository secret name prefix of each reference (store, android_secret, web_secret, hosting_secret; empty for none). Written to GITHUB_OUTPUT when set, and printed.",
+      "params": [
+        {
+          "name": "settings",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "description": "components/ourapps-release/server/release.json."
+          }
+        },
+        {
+          "name": "markers",
+          "required": false,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(web|android|windows|ios)=.+$",
+              "description": "<target>=<path>: the file whose presence shows the application has that target's project."
+            }
+          }
+        }
+      ],
+      "result": {
+        "name": "exitStatus",
+        "schema": {
+          "type": "integer",
+          "description": "0 on success.",
+          "minimum": 0
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CommandFailed"
+        }
+      ],
+      "tags": [
+        {
+          "name": "command"
+        }
+      ],
+      "paramStructure": "by-position"
+    },
+    {
       "name": "release_targets.py read",
       "description": "Writes the store's switches (TargetSwitches) to out; with --github-output also writes each as true or false to GITHUB_OUTPUT.",
       "params": [
@@ -906,7 +951,7 @@
     },
     {
       "name": "publish_release.py",
-      "description": "Creates a GitHub Release with the icon, screenshots, changelog, signed APK, web bundle and my-app.json; reads the store's switches before writing and again before the manifest goes up; a switched-off target keeps the latest release's entry; a failed read leaves GitHub untouched. Exit 0 with nothing published when no target is switched on.",
+      "description": "Creates a GitHub Release with the icon, screenshots, changelog, APK (<application id>.apk), web bundle and my-app.json; reads the store's switches before writing and again before the manifest goes up; a switched-off target keeps the latest release's entry; a failed read leaves GitHub untouched. Exit 0 with nothing published when no target is switched on.",
       "params": [
         {
           "name": "--app",
@@ -972,11 +1017,24 @@
           }
         },
         {
-          "name": "--scripts",
+          "name": "--tag",
           "required": false,
           "schema": {
             "type": "string",
-            "description": "Folder of the helper scripts."
+            "description": "The release's tag; default release-<version>-<build>. An existing tag (the pushed v1.2.3) is used as it is.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+          }
+        },
+        {
+          "name": "--attach",
+          "description": "Repeatable.",
+          "required": false,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "A file uploaded to the release and not declared in my-app.json, for example an unsigned Windows installer."
+            }
           }
         }
       ],
@@ -1032,14 +1090,24 @@
             "description": "Label.",
             "pattern": "^[A-Za-z][A-Za-z0-9 -]{0,63}$"
           },
+          "storeAddress": {
+            "type": "string",
+            "description": "The store's address with no path (default https://ourapps.app); https, or http only for localhost and 127.0.0.1. A trailing slash is dropped.",
+            "pattern": "^(https://[A-Za-z0-9.-]+(:[0-9]{1,5})?|http://(localhost|127\\.0\\.0\\.1)(:[0-9]{1,5})?)/?$"
+          },
           "manifestUrl": {
             "type": "string",
-            "description": "The store's address with no path, for example https://ourapps.app; https, or http only for localhost and 127.0.0.1. A trailing slash is dropped.",
-            "pattern": "^(https://[A-Za-z0-9.-]+(:[0-9]{1,5})?|http://(localhost|127\\.0\\.0\\.1)(:[0-9]{1,5})?)/?$"
+            "description": "Where the store reads my-app.json: the repository's latest release. Unset, empty or none: not given.",
+            "pattern": "^https://api\\.github\\.com/repos/[A-Za-z0-9-]+/[A-Za-z0-9_-]+/releases/latest$|^$|^none$"
+          },
+          "repository": {
+            "type": "string",
+            "description": "The application's repository. Unset, empty or none: not given.",
+            "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_-]+$|^$|^none$"
           },
           "storeCredentials": {
             "type": "string",
-            "description": "Secret reference: repository secrets <NAME>_APP_ID and <NAME>_BUILD_TOKEN. Unset or empty: no store call, no iOS job and no Apple TestFlight workflow; every built target is on and the release still publishes to GitHub.",
+            "description": "Reference name (not secret): repository secrets <NAME>_APP_ID and <NAME>_BUILD_TOKEN. Unset, empty or none: no store call, no iOS job and no Apple TestFlight workflow; every built target is on and the release still publishes to GitHub.",
             "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$|^$"
           },
           "bundleIdentifier": {
@@ -1049,23 +1117,27 @@
           },
           "androidSigning": {
             "type": "string",
-            "description": "Secret reference: <NAME>_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS, _KEY_PASSWORD. Required when targets include android.",
+            "description": "Reference name (not secret): <NAME>_KEYSTORE_BASE64, _KEYSTORE_PASSWORD, _KEY_ALIAS, _KEY_PASSWORD. Required when targets include android.",
             "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$|^$"
           },
           "webDeploy": {
             "type": "string",
-            "description": "Secret reference for hosting the web build on Cloudflare: <NAME>_API_TOKEN and <NAME>_ACCOUNT_ID; only with the web target. Unset: the web build is bundled as web.zip.",
+            "description": "Reference name (not secret) for hosting the web build on Cloudflare: <NAME>_API_TOKEN and <NAME>_ACCOUNT_ID; only with the web target. Unset: the web build is bundled as web.zip.",
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$|^$"
+          },
+          "hostingAccount": {
+            "type": "string",
+            "description": "Reference name (not secret) for the Cloudflare account the server deploys to: <NAME>_API_TOKEN and <NAME>_ACCOUNT_ID. Unset, empty or none: the release deploys no server.",
             "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$|^$"
           }
         },
         "required": [
           "targets",
           "applicationId",
-          "applicationName",
-          "manifestUrl"
+          "applicationName"
         ],
         "additionalProperties": false,
-        "description": "The secret references that are set must give different secret names."
+        "description": "The reference names that are set must give different secret names; none means unset."
       },
       "ReleaseOptions": {
         "type": "object",
@@ -1217,9 +1289,21 @@
             "type": "string",
             "pattern": "^[A-Za-z][A-Za-z0-9 -]{0,63}$"
           },
-          "manifestUrl": {
+          "storeAddress": {
             "type": "string",
             "description": "Without a trailing slash."
+          },
+          "manifestUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repository": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "storeCredentials": {
             "type": [
@@ -1248,17 +1332,27 @@
               "null"
             ],
             "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$"
+          },
+          "hostingAccount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z][A-Za-z0-9_./-]{0,127}$"
           }
         },
         "required": [
           "targets",
           "applicationId",
           "applicationName",
+          "storeAddress",
           "manifestUrl",
+          "repository",
           "storeCredentials",
           "bundleIdentifier",
           "androidSigning",
-          "webDeploy"
+          "webDeploy",
+          "hostingAccount"
         ],
         "additionalProperties": false
       },

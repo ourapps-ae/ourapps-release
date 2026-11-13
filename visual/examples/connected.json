@@ -46,19 +46,34 @@
           "secret": false
         },
         {
-          "id": "manifestUrl",
-          "name": "Manifesturl",
+          "id": "storeAddress",
+          "name": "Storeaddress",
           "type": "string",
           "required": false,
           "secret": false,
           "default": "https://ourapps.app"
         },
         {
+          "id": "manifestUrl",
+          "name": "Manifesturl",
+          "type": "string",
+          "required": false,
+          "secret": false
+        },
+        {
+          "id": "repository",
+          "name": "Repository",
+          "type": "string",
+          "required": false,
+          "secret": false
+        },
+        {
           "id": "storeCredentials",
           "name": "Storecredentials",
           "type": "string",
           "required": false,
-          "secret": true
+          "secret": false,
+          "default": "none"
         },
         {
           "id": "bundleIdentifier",
@@ -72,14 +87,24 @@
           "name": "Androidsigning",
           "type": "string",
           "required": false,
-          "secret": true
+          "secret": false,
+          "default": "none"
         },
         {
           "id": "webDeploy",
           "name": "Webdeploy",
           "type": "string",
           "required": false,
-          "secret": true
+          "secret": false,
+          "default": "none"
+        },
+        {
+          "id": "hostingAccount",
+          "name": "Hostingaccount",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "none"
         }
       ]
     },
@@ -113,15 +138,10 @@
         "targets": "example",
         "applicationId": "example",
         "applicationName": "example",
-        "storeCredentials": {
-          "secretRef": "example/storeCredentials"
-        },
-        "androidSigning": {
-          "secretRef": "example/androidSigning"
-        },
-        "webDeploy": {
-          "secretRef": "example/webDeploy"
-        }
+        "storeCredentials": "example-storecredentials",
+        "androidSigning": "example-androidsigning",
+        "webDeploy": "example-webdeploy",
+        "hostingAccount": "example-hostingaccount"
       }
     },
     {

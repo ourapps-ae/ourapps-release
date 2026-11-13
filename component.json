@@ -1,6 +1,12 @@
 {
   "artefacts": [
     {
+      "destination": "components/ourapps-release/server/release.json",
+      "executable": false,
+      "source": "implementation/server/release.json",
+      "template": true
+    },
+    {
       "destination": "components/ourapps-release/server/render.ts",
       "executable": false,
       "source": "implementation/server/render.ts",
@@ -28,6 +34,12 @@
       "destination": "components/ourapps-release/server/scripts/publish_release.py",
       "executable": false,
       "source": "implementation/server/scripts/publish_release.py",
+      "template": false
+    },
+    {
+      "destination": "components/ourapps-release/server/scripts/release_plan.py",
+      "executable": false,
+      "source": "implementation/server/scripts/release_plan.py",
       "template": false
     },
     {
@@ -95,11 +107,13 @@
     "hosts": [],
     "secrets": [],
     "writes": [
+      "components/ourapps-release/server/release.json",
       "components/ourapps-release/server/render.ts",
       "components/ourapps-release/server/scripts/app_manifest.py",
       "components/ourapps-release/server/scripts/platform_artifacts.py",
       "components/ourapps-release/server/scripts/platform_manifest.py",
       "components/ourapps-release/server/scripts/publish_release.py",
+      "components/ourapps-release/server/scripts/release_plan.py",
       "components/ourapps-release/server/scripts/release_targets.py",
       "components/ourapps-release/server/templates/scripts/build-apple-testflight.sh.template",
       "components/ourapps-release/server/templates/scripts/build-windows.sh.template",
@@ -137,16 +151,31 @@
     {
       "default": "https://ourapps.app",
       "grammar": "address",
+      "id": "storeAddress",
+      "required": false,
+      "secret": false,
+      "type": "string"
+    },
+    {
+      "grammar": "address",
       "id": "manifestUrl",
       "required": false,
       "secret": false,
       "type": "string"
     },
     {
-      "grammar": "identifier",
+      "grammar": "address",
+      "id": "repository",
+      "required": false,
+      "secret": false,
+      "type": "string"
+    },
+    {
+      "default": "none",
+      "grammar": "slug",
       "id": "storeCredentials",
       "required": false,
-      "secret": true,
+      "secret": false,
       "type": "string"
     },
     {
@@ -157,17 +186,27 @@
       "type": "string"
     },
     {
-      "grammar": "identifier",
+      "default": "none",
+      "grammar": "slug",
       "id": "androidSigning",
       "required": false,
-      "secret": true,
+      "secret": false,
       "type": "string"
     },
     {
-      "grammar": "identifier",
+      "default": "none",
+      "grammar": "slug",
       "id": "webDeploy",
       "required": false,
-      "secret": true,
+      "secret": false,
+      "type": "string"
+    },
+    {
+      "default": "none",
+      "grammar": "slug",
+      "id": "hostingAccount",
+      "required": false,
+      "secret": false,
       "type": "string"
     }
   ],
@@ -216,6 +255,10 @@
     },
     {
       "executable": false,
+      "path": "implementation/server/release.json"
+    },
+    {
+      "executable": false,
       "path": "implementation/server/render.ts"
     },
     {
@@ -233,6 +276,10 @@
     {
       "executable": false,
       "path": "implementation/server/scripts/publish_release.py"
+    },
+    {
+      "executable": false,
+      "path": "implementation/server/scripts/release_plan.py"
     },
     {
       "executable": false,

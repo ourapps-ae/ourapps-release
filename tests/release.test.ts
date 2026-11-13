@@ -35,9 +35,26 @@ test("invalid settings are refused with a message that names the problem", () =>
   assert.deepEqual(validateSettings({ ...webOnly, targets: "android web", androidSigning: "android/signing" }).targets, ["android", "web"]);
 });
 
-test("the store address loses a trailing slash and localhost may use http", () => {
-  assert.equal(validateSettings(webOnly).manifestUrl, "https://ourapps.app");
-  assert.equal(validateSettings({ ...webOnly, manifestUrl: "http://localhost:8787" }).manifestUrl, "http://localhost:8787");
+test("the store address loses a trailing slash, localhost may use http, and it defaults to ourapps.app", () => {
+  assert.equal(validateSettings(webOnly).storeAddress, "https://ourapps.app");
+  assert.equal(validateSettings({ ...webOnly, storeAddress: "http://localhost:8787" }).storeAddress, "http://localhost:8787");
+  const { storeAddress: _unused, ...without } = webOnly;
+  assert.equal(validateSettings(without as ReleaseSettings).storeAddress, "https://ourapps.app");
+});
+
+test("the repository and the address the store reads my-app.json from are optional", () => {
+  assert.equal(validateSettings(all).repository, "https://github.com/example/demo");
+  assert.equal(validateSettings(all).manifestUrl, "https://api.github.com/repos/example/demo/releases/latest");
+  assert.equal(validateSettings(webOnly).repository, null);
+  assert.equal(validateSettings(webOnly).manifestUrl, null);
+});
+
+test("a reference name of none is unset", () => {
+  const resolved = validateSettings({ ...webOnly, storeCredentials: "none", webDeploy: "none", hostingAccount: "none" });
+  assert.equal(resolved.storeCredentials, null);
+  assert.equal(resolved.webDeploy, null);
+  assert.equal(resolved.hostingAccount, null);
+  assert.equal(validateSettings({ ...webOnly, hostingAccount: "demo-cloudflare" }).hostingAccount, "demo-cloudflare");
 });
 
 test("store credentials are optional: unset or empty means no store, a value is refused", () => {
@@ -290,5 +307,5 @@ test("release targets, manifest, packages, artifacts and publishing pass their P
   const result = python(new URL("test_release.py", import.meta.url).pathname);
   assert.equal(result.status, 0, result.stderr.split("\n").slice(-30).join("\n"));
   assert.match(result.stderr, /Ran \d+ tests/);
-  assert.match(result.stderr, /\nOK\n?$/);
+  assert.match(result.stderr, /\nOK( \(skipped=\d+\))?\n?$/);
 });

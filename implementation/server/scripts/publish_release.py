@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Creates a GitHub Release with the icon, screenshots, changelog, the signed APK, the web bundle and the
+"""Creates a GitHub Release with the icon, screenshots, changelog, the APK (<application id>.apk), the web bundle and the
 application manifest (my-app.json). Asset addresses inside the manifest are the api.github.com asset URLs.
 
   publish_release.py --app release/app.json --version 1.2.3 --build 45 --apk <path|-> --icon art/icon.png \\
-      [--screenshot p.png ...] [--ipad-screenshots dir] [--changelog CHANGELOG.md] [--scripts dir]
+      [--tag v1.2.3] [--attach file ...] [--screenshot p.png ...] [--ipad-screenshots dir] [--changelog CHANGELOG.md]
+
+--tag is the release's tag (default release-<version>-<build>; an existing tag, such as the pushed v1.2.3, is used as it
+is). --attach uploads a file the manifest does not declare, for example an unsigned Windows installer kept as evidence.
 
 Environment: STORE_APP_ID, STORE_BUILD_TOKEN, STORE_API (see release_targets.py); GITHUB_REPOSITORY; gh signed in
 (GH_TOKEN). Optional: WEB_URL (the web app's own address) or WEB_ZIP (a bundle the store serves instead),
@@ -35,7 +38,7 @@ class Release:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", self.repo):
             raise ValueError("GITHUB_REPOSITORY must be owner/name")
         self.app = json.loads(Path(args.app).read_text())
-        self.tag = f"release-{args.version}-{args.build}"
+        self.tag = args.tag or f"release-{args.version}-{args.build}"
         self.tmp = Path(tempfile.mkdtemp(prefix="publish-release-"))
         self.release_id = ""
 
@@ -104,10 +107,13 @@ class Release:
         icon = self.tmp / "icon.png"
         shutil.copy(args.icon, icon)
         self.upload(icon)
+        apk_name = f"{self.app['id']}.apk"
         if apk != "-":
-            target = self.tmp / "app.apk"
+            target = self.tmp / apk_name
             shutil.copy(apk, target)
             self.upload(target)
+        for extra in args.attach:
+            self.upload(Path(extra))
         shot_names = []
         for index, shot in enumerate(args.screenshot):
             name = f"screenshot-{index + 1}.png"
@@ -129,7 +135,7 @@ class Release:
 
         manifest = app_manifest.build(self.app, {
             "version": args.version, "iconUrl": self.asset_url("icon.png"),
-            "apkUrl": self.asset_url("app.apk") if apk != "-" else "", "webUrl": web_url, "testflightUrl": testflight,
+            "apkUrl": self.asset_url(apk_name) if apk != "-" else "", "webUrl": web_url, "testflightUrl": testflight,
             "screenshots": [self.asset_url(name) for name in shot_names], "screenshotsByPlatform": {"ipad": ipad_urls}})
         if platform_packages:
             urls = {}
@@ -175,10 +181,19 @@ def main(argv):
     parser.add_argument("--screenshot", action="append", default=[])
     parser.add_argument("--ipad-screenshots", default="")
     parser.add_argument("--changelog", default="CHANGELOG.md")
+    parser.add_argument("--tag", default="")
+    parser.add_argument("--attach", action="append", default=[])
     args = parser.parse_args(argv)
     if not re.fullmatch(r"\d+\.\d+\.\d+", args.version) or not re.fullmatch(r"[1-9]\d*", args.build):
         print("publish-release: version must be x.y.z and build a positive number", file=sys.stderr)
         return 2
+    if args.tag and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", args.tag):
+        print("publish-release: the tag must be letters, digits, dots, hyphens and underscores", file=sys.stderr)
+        return 2
+    for extra in args.attach:
+        if not Path(extra).is_file() or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", Path(extra).name) or Path(extra).name == "my-app.json":
+            print(f"publish-release: cannot attach {extra}", file=sys.stderr)
+            return 2
     try:
         return Release(args).run()
     except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:

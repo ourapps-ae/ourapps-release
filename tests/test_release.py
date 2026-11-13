@@ -24,6 +24,7 @@ sys.path.insert(0, str(SCRIPTS))
 import app_manifest  # noqa: E402
 import platform_artifacts  # noqa: E402
 import platform_manifest  # noqa: E402
+import release_plan  # noqa: E402
 import release_targets as TARGETS  # noqa: E402
 
 ALL_ON = json.loads((FIXTURES / "switches.json").read_text())["allOn"]
@@ -494,7 +495,7 @@ class Artifacts(unittest.TestCase):
 
 
 class Publish(Base):
-    def publish(self, apk, targets=None, answer=None, latest="release-0.5.0-37", queue=(), env_extra=None, changelog=None, screenshots=1):
+    def publish(self, apk, targets=None, answer=None, latest="release-0.5.0-37", queue=(), env_extra=None, changelog=None, screenshots=1, extra_args=()):
         Store.answer = answer or (200, json.dumps({"targets": targets or ALL_ON}))
         Store.queue[:] = list(queue)
         d = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -519,6 +520,7 @@ class Publish(Base):
                    "--apk", apk, "--icon", str(d / "icon.png"), "--changelog", str(d / "CHANGELOG.md"), "--ipad-screenshots", str(d / "ipad")]
         for i in range(screenshots):
             command += ["--screenshot", str(d / f"shot{i}.png")]
+        command += list(extra_args)
         r = subprocess.run(command, cwd=d, env=env, capture_output=True, text=True)
         manifest = d / "uploads/my-app.json"
         return r, (json.loads(manifest.read_text()) if manifest.exists() else None), d
@@ -531,7 +533,7 @@ class Publish(Base):
     def test_switched_on_targets_publish_and_windows_is_kept(self):
         r, manifest, d = self.publish(apk="apk")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(manifest["install"]["android"], {"apk": "https://api.github.com/new/app.apk"})
+        self.assertEqual(manifest["install"]["android"], {"apk": "https://api.github.com/new/demo.apk"})
         self.assertEqual(manifest["install"]["pwa"], "https://new.example/")
         self.assertEqual(manifest["install"]["ios"]["testflight"], "https://testflight.apple.com/join/NEW")
         self.assertEqual(manifest["install"]["windows"], PREVIOUS["install"]["windows"])
@@ -543,7 +545,7 @@ class Publish(Base):
         self.assertIn("body=### Added\n- Something new.", create)
         self.assertIn("name=Demo 0.6.0 (build 38)", create)
         self.assertEqual(self.calls(d)[-1][:2], ["release", "edit"])
-        self.assertEqual(sorted(p.name for p in (d / "uploads").iterdir()), ["CHANGELOG.md", "app.apk", "icon.png", "ipad-table.png", "my-app.json", "screenshot-1.png"])
+        self.assertEqual(sorted(p.name for p in (d / "uploads").iterdir()), ["CHANGELOG.md", "demo.apk", "icon.png", "ipad-table.png", "my-app.json", "screenshot-1.png"])
 
     def test_the_manifest_is_the_last_upload_before_the_draft_goes_public(self):
         r, _, d = self.publish(apk="apk")
@@ -566,12 +568,12 @@ class Publish(Base):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(manifest["install"]["android"], PREVIOUS["install"]["android"])
         self.assertEqual(manifest["install"]["pwa"], "https://new.example/")
-        self.assertFalse((d / "uploads/app.apk").exists())
+        self.assertFalse((d / "uploads/demo.apk").exists())
 
     def test_android_off_uploads_no_apk_even_when_given_one(self):
         r, manifest, d = self.publish(apk="apk", targets={**ALL_ON, "android": False})
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertFalse((d / "uploads/app.apk").exists())
+        self.assertFalse((d / "uploads/demo.apk").exists())
         self.assertEqual(manifest["install"]["android"], PREVIOUS["install"]["android"])
 
     def test_switched_off_during_the_run_keeps_the_previous_entry(self):
@@ -660,7 +662,7 @@ class Publish(Base):
         r, manifest, d = self.publish(apk="apk", env_extra=env_extra, answer=(500, "store must not be called"))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(Store.seen, [])
-        self.assertEqual(manifest["install"]["android"], {"apk": "https://api.github.com/new/app.apk"})
+        self.assertEqual(manifest["install"]["android"], {"apk": "https://api.github.com/new/demo.apk"})
         self.assertEqual(manifest["install"]["pwa"], "https://new.example/")
         self.assertEqual(manifest["install"]["ios"], PREVIOUS["install"]["ios"])
         self.assertEqual((d / "published").read_text(), "release-0.6.0-38")
@@ -671,9 +673,78 @@ class Publish(Base):
         self.assertEqual(self.calls(d), [])
         self.assertEqual(Store.seen, [])
 
+    def test_a_given_tag_names_the_release_and_attached_files_are_not_declared(self):
+        d0 = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        installer = d0 / "demo-0.6.0-windows-x64-unsigned.exe"; installer.write_bytes(b"MZ")
+        r, manifest, d = self.publish(apk="apk", extra_args=["--tag", "v0.6.0", "--attach", str(installer)])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((d / "published").read_text(), "v0.6.0")
+        self.assertIn("tag_name=v0.6.0", next(c for c in self.calls(d) if c[:3] == ["api", "-X", "POST"]))
+        self.assertTrue((d / "uploads" / installer.name).exists())
+        self.assertNotIn(installer.name, json.dumps(manifest))
+        for bad in (["--tag", "v1 2"], ["--attach", str(d0 / "missing.exe")]):
+            r, manifest, d = self.publish(apk="apk", extra_args=bad)
+            self.assertEqual(r.returncode, 2, bad)
+            self.assertEqual(self.calls(d), [], bad)
+
     def test_bad_arguments(self):
         r = subprocess.run([sys.executable, "-B", str(SCRIPTS / "publish_release.py"), "--app", "x", "--version", "1.2", "--build", "1", "--icon", "i"], capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
+
+
+class Plan(unittest.TestCase):
+    SETTINGS = {"format": 1, "applicationId": "demo", "applicationName": "Demo", "targets": "web ios android windows", "storeAddress": "https://ourapps.app/",
+                "storeCredentials": "none", "androidSigning": "demo-android-signing", "webDeploy": "none", "hostingAccount": "demo.cloudflare/account"}
+    MARKERS = {"web": "web/vite.config.ts", "android": "android/generate-project.ts", "windows": "desktop/package.json", "ios": "ios/generate-project.ts"}
+
+    def test_a_pushed_tag_builds_the_targets_whose_project_exists(self):
+        out = release_plan.plan(self.SETTINGS, self.MARKERS, "refs/tags/v0.1.0", "7", exists=lambda path: not path.startswith("desktop"))
+        self.assertEqual((out["version"], out["build"], out["tag"]), ("0.1.0", "7", "v0.1.0"))
+        self.assertEqual(out["pipeline"], "web android")
+        self.assertEqual((out["web"], out["android"], out["windows"], out["ios"]), ("true", "true", "false", "true"))
+        self.assertEqual((out["store"], out["android_secret"], out["web_secret"], out["hosting_secret"]), ("", "DEMO_ANDROID_SIGNING", "", "DEMO_CLOUDFLARE_ACCOUNT"))
+        self.assertEqual((out["application"], out["name"], out["store_address"]), ("demo", "Demo", "https://ourapps.app"))
+
+    def test_a_target_the_settings_leave_out_is_not_built(self):
+        out = release_plan.plan({**self.SETTINGS, "targets": "windows"}, self.MARKERS, "refs/tags/v1.2.3", "1", exists=lambda path: True)
+        self.assertEqual((out["pipeline"], out["web"], out["windows"]), ("windows", "false", "true"))
+
+    def test_other_runs_take_the_latest_tag_and_bad_tags_stop(self):
+        out = release_plan.plan(self.SETTINGS, {}, "refs/heads/main", "3", exists=lambda path: True, describe=lambda: "v2.0.1")
+        self.assertEqual((out["version"], out["tag"], out["pipeline"]), ("2.0.1", "", ""))
+        self.assertEqual(release_plan.plan(self.SETTINGS, {}, "", "3", describe=lambda: "")["version"], "0.0.0")
+        for ref, number, settings in (("refs/tags/v1.2", "1", self.SETTINGS), ("refs/tags/v1.2.3", "0", self.SETTINGS),
+                                      ("refs/tags/v1.2.3", "1", {**self.SETTINGS, "androidSigning": "has space"}),
+                                      ("refs/tags/v1.2.3", "1", {k: v for k, v in self.SETTINGS.items() if k != "hostingAccount"})):
+            with self.subTest(ref=ref, number=number), self.assertRaises(ValueError):
+                release_plan.plan(settings, {}, ref, number)
+
+    def test_command_writes_github_output(self):
+        d = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (d / "release.json").write_text(json.dumps(self.SETTINGS))
+        (d / "web").mkdir()
+        (d / "web/vite.config.ts").write_text("")
+        env = {**os.environ, "GITHUB_REF": "refs/tags/v0.1.0", "GITHUB_RUN_NUMBER": "4", "GITHUB_OUTPUT": str(d / "out.txt")}
+        r = subprocess.run([sys.executable, "-B", str(SCRIPTS / "release_plan.py"), "release.json", "web=web/vite.config.ts", "android=android/generate-project.ts"],
+                           cwd=d, env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = dict(line.split("=", 1) for line in (d / "out.txt").read_text().splitlines())
+        self.assertEqual((lines["pipeline"], lines["web"], lines["android"], lines["build"]), ("web", "true", "false", "4"))
+        for bad in (["release.json", "linux=x"], ["release.json", "web"], ["missing.json"], []):
+            self.assertEqual(subprocess.run([sys.executable, "-B", str(SCRIPTS / "release_plan.py"), *bad], cwd=d, env=env, capture_output=True).returncode, 1, bad)
+
+    @unittest.skipUnless((ROOT / "component.json").is_file(), "component.json is not in this copy")
+    def test_the_installed_settings_file_names_every_value_the_plan_reads(self):
+        text = (ROOT / "implementation/server/release.json").read_text()
+        manifest = json.loads((ROOT / "component.json").read_text())
+        settings = {item["id"]: item for item in manifest["collect"]}
+        tokens = [match for match in __import__("re").findall(r"\{\{([A-Za-z]+)\}\}", text)]
+        self.assertTrue(set(tokens) <= set(settings))
+        self.assertTrue(all(not settings[token]["secret"] and ("default" in settings[token] or settings[token]["required"]) for token in tokens))
+        rendered = json.loads(__import__("re").sub(r"\{\{([A-Za-z]+)\}\}", lambda m: str(settings[m[1]].get("default", "x")), text))
+        release_plan.plan(rendered, {}, "refs/tags/v0.1.0", "1")
+        artefact = next(item for item in manifest["artefacts"] if item["source"] == "implementation/server/release.json")
+        self.assertEqual((artefact["destination"], artefact["template"]), ("components/ourapps-release/server/release.json", True))
 
 
 if __name__ == "__main__":
